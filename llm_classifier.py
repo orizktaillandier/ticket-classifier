@@ -16,6 +16,7 @@ dealer_to_id  = mapping_df.set_index("Dealer Name")["Dealer ID"].to_dict()
 
 def classify_ticket(text: str, model="gpt-4o"):
     context = preprocess_ticket(text)
+    print("DEBUG - DETECTED DEALERS:", context.get("dealers_found"))
     dealer_list = context.get("dealers_found", [])
     # Always use all possible dealer names: LLM output, context, and fallback
     dealer_candidates = []
@@ -77,9 +78,6 @@ Return a JSON object exactly as follows, with ALL keys present (use empty string
 }}
 """
 
-context = preprocess_ticket(text)
-print("DETECTED DEALERS:", context.get("dealers_found"))
-
     # --- LLM call + error handling ---
     try:
         resp = client.chat.completions.create(
@@ -121,7 +119,7 @@ print("DETECTED DEALERS:", context.get("dealers_found"))
     if fallback and fallback not in dealer_candidates:
         dealer_candidates.append(fallback)
     
-    print("DEALER CANDIDATES:", dealer_candidates)
+    print("DEBUG - DEALER CANDIDATES:", dealer_candidates)
 
     # --- Try mapping each candidate until success ---
     matched_name = ""
@@ -129,9 +127,9 @@ print("DETECTED DEALERS:", context.get("dealers_found"))
     matched_rep = ""
     for name in dealer_candidates:
         norm = re.sub(r"([a-z])([A-Z])", r"\1 \2", name).lower().strip()
-        print(f"TRYING: '{name}' normalized as '{norm}'")
-        print("MAPPED ID:", dealer_to_id.get(norm))
-        print("MAPPED REP:", dealer_to_rep.get(norm))
+        print(f"DEBUG - TRYING: '{name}' normalized as '{norm}'")
+        print("DEBUG - MAPPED ID:", dealer_to_id.get(norm))
+        print("DEBUG - MAPPED REP:", dealer_to_rep.get(norm))
         if norm in dealer_to_id:
             matched_name = name
             matched_id = dealer_to_id[norm]

@@ -68,7 +68,6 @@ Zoho Fields:
         "Important logic rules:\n"
         "- Only use real dealership rooftops as dealer_name (not group names like 'Kot Auto Group')\n"
         "- If a group name is used, try to extract the actual rooftop from examples or filenames\n"
-        "- Never use 'Olivier Rizk-Taillandier' as rep unless the sender is actually him\n"
         "- The 'syndicator' field must refer to the export target (where D2C is sending the feed), not the data source or origin (e.g. Inventory+, PBS, SERTI)\n"
         "- If any field is uncertain or missing, leave it blank — logic will complete it\n"
         "- Do not infer — only return grounded field values\n"

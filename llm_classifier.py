@@ -1,3 +1,4 @@
+
 import os
 import json
 import re
@@ -20,11 +21,9 @@ def write_log(input_text, output, edge_case=None):
     with open(LOGFILE, "a", encoding="utf-8") as f:
         f.write(json.dumps(entry, ensure_ascii=False) + "\n")
 
-# Load OpenAI API Key
 load_dotenv()
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-# Load and normalize rep map
 rep_mapping = pd.read_csv("./rep_dealer_mapping.csv")
 rep_mapping["Dealer Name Normalized"] = (
     rep_mapping["Dealer Name"]
@@ -64,7 +63,7 @@ def extract_best_dealer(context, raw_message):
 def extract_syndicator(text):
     known = [
         "vauto", "easydeal", "car media", "icc", "homenet", "serti",
-        "evolutionautomobiles", "spincar", "trader", "pbs"
+        "evolutionautomobiles", "spincar", "trader", "pbs", "omni"
     ]
     lower = text.lower()
     for s in known:
@@ -95,51 +94,56 @@ def detect_edge_case(message, zoho_fields=None):
     syndicator = (zoho_fields or {}).get("syndicator", "").lower() if zoho_fields else ""
     if ("trader" in text or syndicator == "trader") and ("used" in text and "new" in text):
         return "E55"
-    if re.search(r"(stock number|stock#).*[<>\;'\\\"]", text):
+    if re.search(r"(stock number|stock#).*[<>\;'\\"]", text):
         return "E44"
     if "firewall" in text or "your request was rejected by d2c media's firewall" in text:
         return "E74"
     return ""
 
 def classify_ticket_llm(ticket_message, context=None, model="gpt-4o"):
-    FEWSHOT = """Example:
-Message:
-"Hi Véronique, Mazda Steele is still showing vehicles that were sold last week. Request to check the PBS import."
-Zoho Fields:
-contact: Véronique Fournier
-dealer_name: Mazda Steele
-dealer_id: 2618
-rep: Véronique Fournier
-category: Problem / Bug
-sub_category: Import
-syndicator: PBS
-inventory_type:
-"""
+    FEWSHOT = (
+        "Example:\n"
+        "Message:\n"
+        "\"Hi Véronique, Mazda Steele is still showing vehicles that were sold last week. "
+        "Request to check the PBS import.\"\n"
+        "Zoho Fields:\n"
+        "contact: Véronique Fournier\n"
+        "dealer_name: Mazda Steele\n"
+        "dealer_id: 2618\n"
+        "rep: Véronique Fournier\n"
+        "category: Problem / Bug\n"
+        "sub_category: Import\n"
+        "syndicator: PBS\n"
+        "inventory_type:\n"
+    )
+
     system_prompt = (
         "You are a Zoho Desk classification assistant. Only use these allowed dropdown values for each field:\n"
-        "Category: Product Activation – New Client, Product Activation – Existing Client, Product Cancellation, Problem / Bug, General Question, Analysis / Review, Other.\n"
+        "Category: Product Activation – New Client, Product Activation – Existing Client, Product Cancellation, "
+        "Problem / Bug, General Question, Analysis / Review, Other.\n"
         "Sub Category: Import, Export, Sales Data Import, FB Setup, Google Setup, Other Department, Other, AccuTrade.\n"
-        "Inventory Type: New, Used, Demo, New + Used, or blank.\n"
-        "If a value is not clear, leave it blank.\n" + FEWSHOT + "\nNow classify this message:"
+        "Inventory Type: New, Used, Demo, New + Used, or blank.\n" + FEWSHOT +
+        "\nNow classify this message:"
     )
+
     user_prompt = f"""{ticket_message}
 
 Return a JSON object:
 {{
   "zoho_fields": {{
-    "contact": ...,
-    "dealer_name": ...,
-    "dealer_id": ...,
-    "rep": ...,
-    "category": ...,
-    "sub_category": ...,
-    "syndicator": ...,
-    "inventory_type": ...
+    "contact": "...",
+    "dealer_name": "...",
+    "dealer_id": "...",
+    "rep": "...",
+    "category": "...",
+    "sub_category": "...",
+    "syndicator": "...",
+    "inventory_type": "..."
   }},
   "zoho_comment": "...",
   "suggested_reply": "..."
-}}
-"""
+}}"""
+
     response = client.chat.completions.create(
         model=model,
         messages=[
@@ -152,11 +156,8 @@ Return a JSON object:
     match = re.search(r'{.*}', content, re.DOTALL)
     if not match:
         raise ValueError(f"❌ No JSON block found in response:\n{content}")
-
-    # ✅ Fixed position — now always parsed
     result = json.loads(match.group(0))
 
-    # ✅ Format Zoho Comment with structured content
     zf = result.get("zoho_fields", {})
     comment_parts = []
     if zf.get("dealer_name"):
@@ -198,12 +199,9 @@ def classify_ticket(ticket_message):
     needs_llm = not fields["category"] or not fields["sub_category"]
     if needs_llm:
         result = classify_ticket_llm(ticket_message, context=fields)
-        if dealer_id and rep and dealer_name:
-            for key in ["dealer_name", "dealer_id", "rep", "contact"]:
+        for key in ["dealer_name", "dealer_id", "rep", "contact"]:
+            if fields.get(key):
                 result["zoho_fields"][key] = fields[key]
-        else:
-            for key in ["dealer_name", "dealer_id", "rep", "contact"]:
-                result["zoho_fields"][key] = ""
         for k in ["syndicator", "inventory_type"]:
             if not result["zoho_fields"].get(k):
                 result["zoho_fields"][k] = fields.get(k, "")
@@ -221,9 +219,3 @@ def classify_ticket(ticket_message):
         }
         write_log(ticket_message, result, result["edge_case"])
         return result
-
-if __name__ == "__main__":
-    import sys
-    msg = sys.stdin.read()
-    result = classify_ticket(msg)
-    print(json.dumps(result, indent=2, ensure_ascii=False))

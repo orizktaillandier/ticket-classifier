@@ -156,12 +156,12 @@ Return a JSON object:
         raise ValueError(f"❌ No JSON block found in response:\n{content}")
         result = json.loads(match.group(0))
 
-    # Fix: Format zoho_comment as clean multi-line string
-    comment_parts = []
+    # Patch: format Zoho Comment using structured fields
     zf = result.get("zoho_fields", {})
+    comment_parts = []
     if zf.get("dealer_name"):
         comment_parts.append(zf["dealer_name"])
-    if "category" in zf and zf["category"]:
+    if zf.get("category"):
         comment_parts.append(zf["category"])
     if zf.get("sub_category"):
         comment_parts.append(f"Issue: {zf['sub_category']}")

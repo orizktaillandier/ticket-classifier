@@ -43,6 +43,8 @@ def classify_ticket(text: str, model="gpt-4o"):
     dealer_list = context.get("dealers_found", [])
     example = dealer_list[0] if dealer_list else find_example_dealer(text)
 
+    override = lookup_dealer_by_name(example) if example else {}
+
     FEMSHOT = """
 Example:
 Message:
@@ -68,12 +70,14 @@ Zoho Fields:
         "Important logic rules:\n"
         "- Only use real dealership rooftops as dealer_name (not group names like 'Kot Auto Group')\n"
         "- If a group name is used, try to extract the actual rooftop from examples or filenames\n"
+        "- Never use 'Olivier Rizk-Taillandier' as rep unless the sender is actually him\n"
         "- The 'syndicator' field must refer to the export target (where D2C is sending the feed), not the data source or origin (e.g. Inventory+, PBS, SERTI)\n"
         "- If any field is uncertain or missing, leave it blank — logic will complete it\n"
         "- Do not infer — only return grounded field values\n"
         + FEMSHOT +
         "\nNow classify the following message and return ONLY the JSON object (no explanation, no extra text):"
     )
+
     USER_PROMPT = f"""
 Message:
 {text}
@@ -88,7 +92,7 @@ Return a JSON object exactly as follows:
     "category": "...",
     "sub_category": "...",
     "syndicator": "...",
-    "inventory_type": ""
+    "inventory_type": "..."
   }},
   "zoho_comment": "...",
   "suggested_reply": "..."
@@ -103,6 +107,7 @@ Return a JSON object exactly as follows:
         ],
         temperature=0.2,
     )
+
     raw = resp.choices[0].message.content.strip()
     raw = re.sub(r"^```(?:json)?\s*", "", raw)
     raw = re.sub(r"\s*```$", "", raw)
@@ -113,24 +118,41 @@ Return a JSON object exactly as follows:
     data = json.loads(json_text)
     zf = data.get("zoho_fields", {})
 
-    # Normalize and fill from mapping if dealer_name exists in file
-    dn = zf.get("dealer_name", "").lower().strip()
-    if dn in dealer_to_id:
-        zf["dealer_id"] = dealer_to_id[dn]
-        zf["rep"] = dealer_to_rep[dn]
+    # Grounded dealer ID and rep only if directly mapped
+    dn_raw = zf.get("dealer_name", "")
+    dn = re.sub(r"([a-z])([A-Z])", r"\1 \2", dn_raw).lower().strip()
+    mapped_id = dealer_to_id.get(dn, "")
+    if mapped_id:
+        zf["dealer_id"] = mapped_id
+        zf["rep"] = dealer_to_rep.get(dn, "")
 
+    # Syndicator fallback from context
     if not zf.get("syndicator") and context.get("syndicators"):
         zf["syndicator"] = context["syndicators"][0].title()
 
+    # Normalize name and contact
     zf["dealer_name"] = zf.get("dealer_name", "").title()
     zf["contact"] = zf["rep"]
 
     if zf.get("syndicator", "").lower() == "omni" and not zf.get("inventory_type"):
         zf["inventory_type"] = "Used + New"
 
-    # Remove hardcoded comment generator
-    data["zoho_comment"] = ""  # Can later be replaced with dynamic handler
+    # Final: temporarily empty comment
+    data["zoho_comment"] = ""
+
+    # Edge-case detection
     data["edge_case"] = detect_edge_case(text, zf)
+
+    # Hide reply for now
     data.pop("suggested_reply", None)
 
     return data
+
+def batch_preprocess_csv(path="classifier_input_examples.csv"):
+    df = pd.read_csv(path)
+    for row in df.itertuples(index=False):
+        print(f"--- Source: {row.source} ---")
+        parsed = classify_ticket(row.message)
+        print(json.dumps(parsed, indent=2))
+        print()
+    return

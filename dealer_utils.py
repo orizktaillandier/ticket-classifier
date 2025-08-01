@@ -15,12 +15,12 @@ def detect_stock_number(text):
 
 def extract_contacts(text):
     lines = text.strip().split('\n')
-    for line in lines[-10:]:
+    for i, line in enumerate(lines[-10:]):
         line = line.strip()
         if re.match(r'^(Best regards|Regards|Merci|Thanks|Cordially|From:|Envoyé par|De:)', line, re.IGNORECASE):
-            next_idx = lines.index(line) + 1
-            if next_idx < len(lines):
-                next_line = lines[next_idx].strip()
+            next_idx = i + 1
+            if next_idx < len(lines[-10:]):
+                next_line = lines[-10:][next_idx].strip()
                 name_match = re.match(r'^[A-Z][a-z]+( [A-Z][a-z]+)+$', next_line)
                 if name_match:
                     return next_line

@@ -58,7 +58,7 @@ def extract_dealers(text):
 def extract_syndicators(text):
     candidates = [
         "vauto", "easydeal", "car media", "icc", "homenet", "serti",
-        "evolutionautomobiles", "spincar", "trader", "pbs"
+        "evolutionautomobiles", "spincar", "trader", "pbs", "omni"
     ]
     return [c for c in candidates if c in text.lower()]
 

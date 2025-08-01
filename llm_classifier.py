@@ -6,10 +6,8 @@ from openai import OpenAI
 from dealer_utils import preprocess_ticket, lookup_dealer_by_name
 from datetime import datetime
 
-# Initialize OpenAI client
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-# Load dealer–rep mapping
 mapping_df = pd.read_csv("rep_dealer_mapping.csv")
 mapping_df["Dealer Name"] = mapping_df["Dealer Name"].astype(str).str.lower().str.strip()
 dealer_to_rep = mapping_df.set_index("Dealer Name")["Rep Name"].to_dict()
@@ -48,15 +46,11 @@ def find_example_dealer(text: str):
     return ""
 
 def classify_ticket(text: str, model="gpt-4o"):
-    # 1. Preprocess context
     context = preprocess_ticket(text)
-
-    # 2. Detect example-based dealer override
     dealer_list = context.get("dealers_found", [])
     example = dealer_list[0] if dealer_list else find_example_dealer(text)
     override = lookup_dealer_by_name(example) if example else {}
 
-    # 3. Build the system + user prompts
     FEMSHOT = """
 Example:
 Message:
@@ -103,7 +97,6 @@ Return a JSON object exactly as follows:
 }}
 """
 
-    # 4. Call the API
     resp = client.chat.completions.create(
         model=model,
         messages=[
@@ -113,53 +106,44 @@ Return a JSON object exactly as follows:
         temperature=0.2,
     )
     raw = resp.choices[0].message.content.strip()
-
-    # 5. Clean JSON fences
     raw = re.sub(r"^```(?:json)?\s*", "", raw)
     raw = re.sub(r"\s*```$", "", raw)
     m = re.search(r"\{.*\}", raw, re.DOTALL)
     if not m:
         raise ValueError("❌ LLM did not return valid JSON:\n" + raw)
     json_text = m.group(0)
-
-    # 6. Parse JSON
     data = json.loads(json_text)
     zf = data.get("zoho_fields", {})
 
-    # 7. Override dealer info from example if valid and not a group
     if example and override.get("dealer_id") and "group" not in example.lower():
         zf["dealer_name"] = example
         zf["dealer_id"] = override["dealer_id"]
         zf["rep"] = override["rep"]
     else:
-        # Otherwise try to lookup by classified dealer_name
         dn = zf.get("dealer_name", "").lower().strip()
         if dn in dealer_to_id:
             zf["dealer_id"] = dealer_to_id[dn]
             zf["rep"] = dealer_to_rep[dn]
 
-    # 8. Post-process fields
+    # Fallback syndicator if LLM missed it
+    if not zf.get("syndicator") and context.get("syndicators"):
+        zf["syndicator"] = context["syndicators"][0].title()
+
     zf["dealer_name"] = zf.get("dealer_name", "").title()
     zf["contact"] = zf["rep"]
 
     if zf.get("syndicator", "").lower() == "omni" and not zf.get("inventory_type"):
         zf["inventory_type"] = "Used + New"
 
-    # 9. Format zoho_comment casing (optional cleanup)
     if "zoho_comment" in data:
         data["zoho_comment"] = data["zoho_comment"].replace(
             zf["dealer_name"].lower(), zf["dealer_name"]
         )
 
-    # 10. Edge-case detection
     data["edge_case"] = detect_edge_case(text, zf)
-
-    # 11. Strip reply for now
     data.pop("suggested_reply", None)
-
     return data
 
-# Optional batch runner
 def batch_preprocess_csv(path="classifier_input_examples.csv"):
     df = pd.read_csv(path)
     for row in df.itertuples(index=False):

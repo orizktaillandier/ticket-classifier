@@ -6,8 +6,10 @@ from openai import OpenAI
 from dealer_utils import preprocess_ticket, lookup_dealer_by_name
 from datetime import datetime
 
+# Initialize OpenAI client
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
+# Load dealer–rep mapping
 mapping_df = pd.read_csv("rep_dealer_mapping.csv")
 mapping_df["Dealer Name"] = mapping_df["Dealer Name"].astype(str).str.lower().str.strip()
 dealer_to_rep = mapping_df.set_index("Dealer Name")["Rep Name"].to_dict()
@@ -46,11 +48,13 @@ def find_example_dealer(text: str):
     return ""
 
 def classify_ticket(text: str, model="gpt-4o"):
+    # Preprocess context
     context = preprocess_ticket(text)
     dealer_list = context.get("dealers_found", [])
     example = dealer_list[0] if dealer_list else find_example_dealer(text)
     override = lookup_dealer_by_name(example) if example else {}
 
+    # LLM prompt
     FEMSHOT = """
 Example:
 Message:
@@ -72,7 +76,13 @@ Zoho Fields:
         "You are a Zoho Desk classification assistant. Only use these allowed dropdown values:\n"
         "- Category: Product Activation – New Client, Product Activation – Existing Client, Product Cancellation, Problem / Bug, General Question, Analysis / Review, Other.\n"
         "- Sub Category: Import, Export, Sales Data Import, FB Setup, Google Setup, Other Department, Other, AccuTrade.\n"
-        "- Inventory Type: New, Used, Demo, New + Used, or blank.\n"
+        "- Inventory Type: New, Used, Demo, New + Used, or blank.\n\n"
+        "Important logic rules:\n"
+        "- Only use real dealership rooftops as dealer_name (not group names like 'Kot Auto Group')\n"
+        "- If a group name is used, try to extract the actual rooftop from examples or filenames\n"
+        "- Never use 'Olivier Rizk-Taillandier' as rep unless the sender is actually him\n"
+        "- If any field is uncertain or missing, leave it blank — logic will complete it\n"
+        "- Do not infer — only return grounded field values\n"
         + FEMSHOT +
         "\nNow classify the following message and return ONLY the JSON object (no explanation, no extra text):"
     )
@@ -97,6 +107,7 @@ Return a JSON object exactly as follows:
 }}
 """
 
+    # Call LLM
     resp = client.chat.completions.create(
         model=model,
         messages=[
@@ -115,10 +126,9 @@ Return a JSON object exactly as follows:
     data = json.loads(json_text)
     zf = data.get("zoho_fields", {})
 
+    # Override logic — prioritize example if LLM gave unmapped result
     dn = zf.get("dealer_name", "").lower().strip()
     mapped_id = dealer_to_id.get(dn, "")
-
-    # If LLM returned an unmapped dealer_name, and override is better → use override
     if not mapped_id and example and override.get("dealer_id") and "group" not in example.lower():
         zf["dealer_name"] = example
         zf["dealer_id"] = override["dealer_id"]
@@ -128,25 +138,33 @@ Return a JSON object exactly as follows:
             zf["dealer_id"] = mapped_id
             zf["rep"] = dealer_to_rep.get(dn, "")
 
-    # Fallback syndicator if LLM missed it
+    # Backup syndicator
     if not zf.get("syndicator") and context.get("syndicators"):
         zf["syndicator"] = context["syndicators"][0].title()
 
+    # Normalize
     zf["dealer_name"] = zf.get("dealer_name", "").title()
     zf["contact"] = zf["rep"]
 
+    # Inventory fallback
     if zf.get("syndicator", "").lower() == "omni" and not zf.get("inventory_type"):
         zf["inventory_type"] = "Used + New"
 
+    # Comment fix
     if "zoho_comment" in data:
         data["zoho_comment"] = data["zoho_comment"].replace(
             zf["dealer_name"].lower(), zf["dealer_name"]
         )
 
+    # Edge case tagging
     data["edge_case"] = detect_edge_case(text, zf)
+
+    # Temporarily hide reply
     data.pop("suggested_reply", None)
+
     return data
 
+# Optional batch processor
 def batch_preprocess_csv(path="classifier_input_examples.csv"):
     df = pd.read_csv(path)
     for row in df.itertuples(index=False):

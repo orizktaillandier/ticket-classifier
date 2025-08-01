@@ -8,7 +8,6 @@ from datetime import datetime
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-# Load mapping CSV once at module load
 mapping_df = pd.read_csv("rep_dealer_mapping.csv")
 mapping_df["Dealer Name"] = mapping_df["Dealer Name"].astype(str).str.lower().str.strip()
 dealer_to_rep = mapping_df.set_index("Dealer Name")["Rep Name"].to_dict()
@@ -16,9 +15,9 @@ dealer_to_id  = mapping_df.set_index("Dealer Name")["Dealer ID"].to_dict()
 
 def classify_ticket(text: str, model="gpt-4o"):
     context = preprocess_ticket(text)
-    print("DEBUG - DETECTED DEALERS:", context.get("dealers_found"))
+    # Debug print
+    # print("DEBUG - DETECTED DEALERS:", context.get("dealers_found"))
     dealer_list = context.get("dealers_found", [])
-    # Always use all possible dealer names: LLM output, context, and fallback
     dealer_candidates = []
 
     FEMSHOT = """
@@ -89,8 +88,6 @@ Return a JSON object exactly as follows, with ALL keys present (use empty string
             temperature=0.2,
         )
         raw = resp.choices[0].message.content.strip()
-        # Uncomment for debugging
-        # print("RAW LLM OUTPUT:", raw)
     except Exception as e:
         print("❌ LLM call failed:", repr(e))
         return {"error": str(e)}
@@ -106,7 +103,6 @@ Return a JSON object exactly as follows, with ALL keys present (use empty string
     zf = data.get("zoho_fields", {})
 
     # --- Always build list of all possible dealer name candidates ---
-    # LLM output first, then context detections, then fallback example
     dn_llm = zf.get("dealer_name", "").strip()
     if dn_llm:
         dealer_candidates.append(dn_llm)
@@ -114,12 +110,9 @@ Return a JSON object exactly as follows, with ALL keys present (use empty string
         d = d.strip()
         if d and d not in dealer_candidates:
             dealer_candidates.append(d)
-    # Last-resort: use fallback from "for X", "from X", "regarding X"
     fallback = find_example_dealer(text)
     if fallback and fallback not in dealer_candidates:
         dealer_candidates.append(fallback)
-    
-    print("DEBUG - DEALER CANDIDATES:", dealer_candidates)
 
     # --- Try mapping each candidate until success ---
     matched_name = ""
@@ -127,9 +120,6 @@ Return a JSON object exactly as follows, with ALL keys present (use empty string
     matched_rep = ""
     for name in dealer_candidates:
         norm = re.sub(r"([a-z])([A-Z])", r"\1 \2", name).lower().strip()
-        print(f"DEBUG - TRYING: '{name}' normalized as '{norm}'")
-        print("DEBUG - MAPPED ID:", dealer_to_id.get(norm))
-        print("DEBUG - MAPPED REP:", dealer_to_rep.get(norm))
         if norm in dealer_to_id:
             matched_name = name
             matched_id = dealer_to_id[norm]
@@ -153,7 +143,6 @@ Return a JSON object exactly as follows, with ALL keys present (use empty string
         zf["rep"] = matched_rep
         zf["contact"] = matched_rep
     else:
-        # If LLM output for rep is valid, use it as contact, otherwise blank
         zf["dealer_name"] = dn_llm.title() if dn_llm else ""
         zf["contact"] = zf.get("rep", "")
 
@@ -166,11 +155,9 @@ Return a JSON object exactly as follows, with ALL keys present (use empty string
         if key not in zf or not isinstance(zf[key], str):
             zf[key] = ""
 
-    # --- Syndicator fallback if missing and context finds one ---
     if not zf.get("syndicator") and context.get("syndicators"):
         zf["syndicator"] = context["syndicators"][0].title()
 
-    # --- Compose comment and edge case ---
     data["zoho_comment"] = format_zoho_comment(zf, context)
     data["edge_case"] = detect_edge_case(text, zf)
     data.pop("suggested_reply", None)

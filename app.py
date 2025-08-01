@@ -27,7 +27,7 @@ if st.button("Classify Ticket"):
     else:
         try:
             with st.spinner("Running classification..."):
-                result = classify_ticket(ticket_input.strip())
+                result = classify_ticket_llm(ticket_input.strip())
 
             st.success("✅ Classification complete!")
 

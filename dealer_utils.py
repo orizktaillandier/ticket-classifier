@@ -81,3 +81,51 @@ def preprocess_ticket(text):
         "image_flags": extract_image_flags(text),
         "line_count": text.count("\\n") + 1
     }
+
+def lookup_dealer_by_name(name, csv_path="rep_dealer_mapping.csv"):
+    name = name.lower().strip()
+    df = pd.read_csv(csv_path)
+    df["Dealer Name"] = df["Dealer Name"].str.lower().str.strip()
+
+    match = df[df["Dealer Name"] == name]
+    if not match.empty:
+        return {
+            "dealer_id": str(match.iloc[0]["Dealer ID"]),
+            "rep": match.iloc[0]["Rep Name"]
+        }
+    return {}
+
+def detect_edge_case(message: str, zoho_fields=None):
+    text = message.lower()
+    synd = (zoho_fields or {}).get("syndicator", "").lower()
+    if ("trader" in text or synd == "trader") and "used" in text and "new" in text:
+        return "E55"
+    if re.search(r"(stock number|stock#).*?[<>'\\\\\\\"]", text):
+        return "E44"
+    if "firewall" in text:
+        return "E74"
+    if "partial" in text and "trim" in text and "inventory+" in text and "omni" in text:
+        return "E77"
+    return ""
+
+def format_zoho_comment(zf, context):
+    lines = []
+    lines.append(f"{zf.get('dealer_name', '')} ({zf.get('dealer_id', '')})")
+    lines.append(f"Rep: {zf.get('rep', '')}")
+
+    dealer_emails = re.findall(r"[a-z0-9._%+-]+@[a-z0-9.-]+\\.[a-z]{2,}", context.get("message", "").lower())
+    known = [e for e in dealer_emails if "kotauto" in e or "fairisle" in e or "autogroup" in e]
+    if known:
+        lines.append(f"Dealer contact: {known[0]}")
+
+    synd = zf.get("syndicator", "").replace(".auto", "").title()
+    invtype = zf.get("inventory_type") or "Used + New"
+    lines.append(f"Export: {synd} – {invtype}")
+
+    lines.append("")
+    lines.append("Client says exported trims are incomplete.")
+    lines.append("They are manually entering extended descriptions in D2C but want those sent to Omni.")
+    lines.append("OMNI confirmed the data does not match what was previously coming from Inventory+.")
+    lines.append("Will review export data and source logic.")
+
+    return "\\n".join(lines)

@@ -1,3 +1,4 @@
+
 import re
 import nltk
 import pandas as pd
@@ -5,6 +6,26 @@ import pandas as pd
 nltk.download("punkt", quiet=True)
 
 DEALER_BLOCKLIST = {"blue admin", "admin blue", "admin red", "d2c media", "cars commerce"}
+
+# Load approved syndicators
+try:
+    SYNDICATOR_LIST = pd.read_csv("Full_Syndicator_Keyword_Reference.csv")["Syndicator"].dropna()
+    APPROVED_SYNDICATORS = set(s.lower() for s in SYNDICATOR_LIST)
+except Exception:
+    APPROVED_SYNDICATORS = set()
+
+# Keyword-to-approved-name mapping
+SYNDICATOR_KEYWORDS = {
+    "edealer": "EDealer",
+    "toyota legacy elite": "EDealer",
+    "legacy elite": "EDealer",
+    "gubagoo": "Gubagoo",
+    "spincar": "SpinCar",
+    "trader": "Trader",
+    "easydeal": "EasyDeal",
+    "facebook": "Facebook",
+    "google": "Google",
+}
 
 def detect_language(text):
     return "fr" if re.search(r"\b(merci|bonjour|véhicule|images|depuis)\b", text.lower()) else "en"
@@ -32,7 +53,6 @@ def extract_contacts(text):
     return ""
 
 def extract_dealers(text):
-    # 1. Look for "Dealership Name: ..." or similar
     lines = text.split('\n')
     extracted = []
     for line in lines:
@@ -41,7 +61,6 @@ def extract_dealers(text):
             candidate = m.group(2).strip()
             if candidate:
                 extracted.append(candidate.lower())
-    # 2. Fall back to old OEM matcher
     if not extracted:
         dealer_matches = re.findall(
             r"\b(?:mazda|toyota|honda|chevrolet|hyundai|genesis|ford|ram|gmc|acura|jeep"
@@ -60,11 +79,18 @@ def extract_dealers(text):
     return extracted
 
 def extract_syndicators(text):
-    candidates = [
-        "vauto", "easydeal", "car media", "icc", "homenet", "serti",
-        "evolutionautomobiles", "spincar", "trader", "pbs", "google", "omni", "gubagoo"
-    ]
-    return [c for c in candidates if c in text.lower()]
+    text = text.lower()
+    matches = []
+
+    for keyword, name in SYNDICATOR_KEYWORDS.items():
+        if keyword in text and name.lower() in APPROVED_SYNDICATORS:
+            matches.append(name)
+
+    for name in APPROVED_SYNDICATORS:
+        if name in text:
+            matches.append(name.title())
+
+    return list(set(matches))
 
 def extract_image_flags(text):
     flags = []
@@ -93,7 +119,6 @@ def lookup_dealer_by_name(name, csv_path="rep_dealer_mapping.csv"):
     name = name.lower().strip()
     df = pd.read_csv(csv_path)
     df["Dealer Name"] = df["Dealer Name"].str.lower().str.strip()
-
     match = df[df["Dealer Name"] == name]
     if not match.empty:
         return {
@@ -107,7 +132,7 @@ def detect_edge_case(message: str, zoho_fields=None):
     synd = (zoho_fields or {}).get("syndicator", "").lower()
     if ("trader" in text or synd == "trader") and "used" in text and "new" in text:
         return "E55"
-    if re.search(r"(stock number|stock#).*?[<>'\\\\\"]", text):
+    if re.search(r"(stock number|stock#).*?[<>'\\"]", text):
         return "E44"
     if "firewall" in text:
         return "E74"
@@ -123,11 +148,9 @@ def format_zoho_comment(zf, context):
     syndicator = zf.get('syndicator', '')
     inventory_type = zf.get('inventory_type', '') or 'New + Used'
 
-    # Dealer/rep
     lines.append(f"{zf.get('dealer_name', '')} ({zf.get('dealer_id', '')})")
     lines.append(f"Rep: {zf.get('rep', '')}")
 
-    # Dealer contact: only show first non-D2C/CarsCommerce email found in message
     dealer_emails = []
     for e in re.findall(r"[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}", context.get("message", "").lower()):
         if not any(skip in e for skip in ("d2cmedia", "carscommerce")):
@@ -135,31 +158,26 @@ def format_zoho_comment(zf, context):
     if dealer_emails:
         lines.append(f"Dealer contact: {dealer_emails[0]}")
 
-    # ---- Export Activation ----
     if sub_category == "export":
         lines.append(f"Export: {syndicator} – {inventory_type}")
         lines.append("")
         lines.append("@Audrey Girard approuves-tu ce nouvel export?")
         lines.append("Merci!")
 
-    # ---- Import/Sync Issue ----
     elif sub_category == "import":
         lines.append(f"Import: {syndicator} – {inventory_type}")
         lines.append("")
         lines.append("Client reports import/sync issue. Will investigate.")
 
-    # ---- Image/Photo Bug ----
     elif "image" in context.get("image_flags", []) or "photo" in context.get("message", "").lower():
         lines.append("Client says issue with vehicle images/photos.")
         lines.append("Looks random.")
         lines.append("Will investigate.")
 
-    # ---- System/Firewall Error ----
     elif "firewall" in context.get("message", "").lower():
         lines.append("Partner unable to pull import due to firewall block.")
         lines.append("Will escalate.")
 
-    # ---- Default / Other ----
     else:
         lines.append("Ticket logged for review.")
         lines.append("Will investigate.")

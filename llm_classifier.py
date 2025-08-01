@@ -154,7 +154,23 @@ Return a JSON object:
     match = re.search(r'{.*}', content, re.DOTALL)
     if not match:
         raise ValueError(f"❌ No JSON block found in response:\n{content}")
-    return json.loads(match.group(0))
+        result = json.loads(match.group(0))
+
+    # Fix: Format zoho_comment as clean multi-line string
+    comment_parts = []
+    zf = result.get("zoho_fields", {})
+    if zf.get("dealer_name"):
+        comment_parts.append(zf["dealer_name"])
+    if "category" in zf and zf["category"]:
+        comment_parts.append(zf["category"])
+    if zf.get("sub_category"):
+        comment_parts.append(f"Issue: {zf['sub_category']}")
+    if zf.get("syndicator"):
+        comment_parts.append(f"Syndicator: {zf['syndicator']}")
+    comment_parts.append("Will investigate.")
+    result["zoho_comment"] = "\n".join(comment_parts)
+
+    return result
 
 def classify_ticket(ticket_message):
     context = preprocess_ticket(ticket_message)

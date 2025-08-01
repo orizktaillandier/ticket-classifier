@@ -1,47 +1,52 @@
 import streamlit as st
 from llm_classifier import classify_ticket
-import pandas as pd
 
 st.set_page_config(page_title="Ticket AI Classifier", layout="wide")
 st.title("🧠 Ticket AI Classifier")
 
 st.markdown(
     """
-    This tool classifies Zoho Desk tickets.
+    This tool classifies Zoho Desk tickets using your custom LLM pipeline.
     - Paste an email/ticket below to extract Zoho fields and generate the Zoho comment.
+    - Dealer ID, rep, syndicator, and comment logic are dynamic.
     """
 )
 
-with st.expander("ℹ️ Instructions"):
+with st.expander("ℹ️ How to Use"):
     st.write("""
-    - Paste the full body of a ticket or email in the box below.
-    - The model will extract fields, suggest a Zoho comment, and flag any edge cases.
+    - Paste the full body of a ticket or email in the text box below.
+    - Click 'Classify Ticket' to run it through the classifier.
+    - You will see extracted Zoho fields, the internal comment, and any detected edge cases.
     """)
 
-ticket_input = st.text_area("Paste ticket or email here:", height=300)
+ticket_input = st.text_area("Paste full email or ticket content here:", height=300)
 
-if st.button("Classify Ticket") and ticket_input.strip():
-    try:
-        with st.spinner("Classifying ticket..."):
-            result = classify_ticket(ticket_input.strip())
-        st.success("✅ Classification complete!")
+if st.button("Classify Ticket"):
+    if not ticket_input.strip():
+        st.warning("Please paste a ticket message before running the classifier.")
+    else:
+        try:
+            with st.spinner("Running classification..."):
+                result = classify_ticket(ticket_input.strip())
 
-        fields = result.get("zoho_fields", {})
-        zoho_comment = result.get("zoho_comment", "")
-        edge_case = result.get("edge_case", "")
+            st.success("✅ Classification complete!")
 
-        st.subheader("📋 Summary for Zoho Fields")
-        st.json(fields)
+            fields = result.get("zoho_fields", {})
+            comment = result.get("zoho_comment", "")
+            edge = result.get("edge_case", "")
 
-        st.subheader("📝 Zoho Comment")
-        st.code(zoho_comment, language="vbnet")
+            st.subheader("📋 Summary for Zoho Fields")
+            st.json(fields)
 
-        if edge_case:
-            st.warning(f"⚠️ Edge case detected: {edge_case}")
+            st.subheader("📝 Zoho Comment")
+            st.code(comment, language="vbnet")
 
-    except Exception as e:
-        st.error(f"❌ Error: {str(e)}")
+            if edge:
+                st.warning(f"⚠️ Edge case detected: {edge}")
+
+        except Exception as e:
+            st.error("❌ An unexpected error occurred.")
+            st.exception(e)
 
 st.markdown("---")
-st.caption("Powered by your production logic – no static business rules.")
-
+st.caption("Internal prototype — no data is stored or transmitted.")

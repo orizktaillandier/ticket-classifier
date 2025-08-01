@@ -8,6 +8,7 @@ from datetime import datetime
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
+# Load mapping CSV once at module load
 mapping_df = pd.read_csv("rep_dealer_mapping.csv")
 mapping_df["Dealer Name"] = mapping_df["Dealer Name"].astype(str).str.lower().str.strip()
 dealer_to_rep = mapping_df.set_index("Dealer Name")["Rep Name"].to_dict()
@@ -16,8 +17,8 @@ dealer_to_id  = mapping_df.set_index("Dealer Name")["Dealer ID"].to_dict()
 def classify_ticket(text: str, model="gpt-4o"):
     context = preprocess_ticket(text)
     dealer_list = context.get("dealers_found", [])
-    example = dealer_list[0] if dealer_list else find_example_dealer(text)
-    override = lookup_dealer_by_name(example) if example else {}
+    # Always use all possible dealer names: LLM output, context, and fallback
+    dealer_candidates = []
 
     FEMSHOT = """
 Example:
@@ -76,6 +77,7 @@ Return a JSON object exactly as follows, with ALL keys present (use empty string
 }}
 """
 
+    # --- LLM call + error handling ---
     try:
         resp = client.chat.completions.create(
             model=model,
@@ -86,11 +88,13 @@ Return a JSON object exactly as follows, with ALL keys present (use empty string
             temperature=0.2,
         )
         raw = resp.choices[0].message.content.strip()
-        print("RAW LLM OUTPUT:", raw)
+        # Uncomment for debugging
+        # print("RAW LLM OUTPUT:", raw)
     except Exception as e:
         print("❌ LLM call failed:", repr(e))
         return {"error": str(e)}
 
+    # --- Parse JSON output from LLM ---
     raw = re.sub(r"^```(?:json)?\s*\{", "{", raw)
     raw = re.sub(r"\s*```$", "", raw)
     m = re.search(r"\{.*\}", raw, re.DOTALL)
@@ -98,11 +102,56 @@ Return a JSON object exactly as follows, with ALL keys present (use empty string
         raise ValueError("❌ LLM did not return valid JSON:\n" + raw)
     json_text = m.group(0)
     data = json.loads(json_text)
-    print("PARSED JSON:", data)
-
     zf = data.get("zoho_fields", {})
 
-    # Ensure all keys exist and are strings
+    # --- Always build list of all possible dealer name candidates ---
+    # LLM output first, then context detections, then fallback example
+    dn_llm = zf.get("dealer_name", "").strip()
+    if dn_llm:
+        dealer_candidates.append(dn_llm)
+    for d in dealer_list:
+        d = d.strip()
+        if d and d not in dealer_candidates:
+            dealer_candidates.append(d)
+    # Last-resort: use fallback from "for X", "from X", "regarding X"
+    fallback = find_example_dealer(text)
+    if fallback and fallback not in dealer_candidates:
+        dealer_candidates.append(fallback)
+
+    # --- Try mapping each candidate until success ---
+    matched_name = ""
+    matched_id = ""
+    matched_rep = ""
+    for name in dealer_candidates:
+        norm = re.sub(r"([a-z])([A-Z])", r"\1 \2", name).lower().strip()
+        if norm in dealer_to_id:
+            matched_name = name
+            matched_id = dealer_to_id[norm]
+            matched_rep = dealer_to_rep.get(norm, "")
+            break
+
+    # --- Fallback to lookup_dealer_by_name if no direct match ---
+    if not matched_id and dealer_candidates:
+        for name in dealer_candidates:
+            override = lookup_dealer_by_name(name)
+            if override.get("dealer_id"):
+                matched_name = name
+                matched_id = override["dealer_id"]
+                matched_rep = override["rep"]
+                break
+
+    # --- Update output with mapping, only if we find a valid match ---
+    if matched_id:
+        zf["dealer_name"] = matched_name.title()
+        zf["dealer_id"] = matched_id
+        zf["rep"] = matched_rep
+        zf["contact"] = matched_rep
+    else:
+        # If LLM output for rep is valid, use it as contact, otherwise blank
+        zf["dealer_name"] = dn_llm.title() if dn_llm else ""
+        zf["contact"] = zf.get("rep", "")
+
+    # Ensure all keys exist as strings
     expected_keys = [
         "contact", "dealer_name", "dealer_id", "rep",
         "category", "sub_category", "syndicator", "inventory_type"
@@ -111,39 +160,11 @@ Return a JSON object exactly as follows, with ALL keys present (use empty string
         if key not in zf or not isinstance(zf[key], str):
             zf[key] = ""
 
-    # Normalize dealer name for mapping
-    dn_raw = zf.get("dealer_name", "")
-    dn = re.sub(r"([a-z])([A-Z])", r"\1 \2", dn_raw).lower().strip()
-
-    mapped_id = dealer_to_id.get(dn, "")
-    mapped_rep = dealer_to_rep.get(dn, "")
-
-    # If no valid mapping but example from context exists, use it
-    if not mapped_id and example:
-        fallback_override = lookup_dealer_by_name(example)
-        if fallback_override:
-            zf["dealer_name"] = example.title()
-            zf["dealer_id"] = fallback_override["dealer_id"]
-            zf["rep"] = fallback_override["rep"]
-        else:
-            zf["dealer_id"] = ""
-            zf["rep"] = ""
-    else:
-        # Override with mapping if found
-        if mapped_id:
-            zf["dealer_id"] = mapped_id
-        if mapped_rep:
-            zf["rep"] = mapped_rep
-
-    # Final normalization
-    zf["dealer_name"] = zf.get("dealer_name", "").title()
-    zf["contact"] = zf.get("rep", "")
-
-    # Syndicator fallback if missing and detected in context
+    # --- Syndicator fallback if missing and context finds one ---
     if not zf.get("syndicator") and context.get("syndicators"):
         zf["syndicator"] = context["syndicators"][0].title()
 
-    # Compose zoho comment and detect edge case
+    # --- Compose comment and edge case ---
     data["zoho_comment"] = format_zoho_comment(zf, context)
     data["edge_case"] = detect_edge_case(text, zf)
     data.pop("suggested_reply", None)
@@ -152,9 +173,9 @@ Return a JSON object exactly as follows, with ALL keys present (use empty string
 
 def find_example_dealer(text: str):
     patterns = [
-        r"for ([A-Za-z0-9 &\\-]+)\\b",
-        r"from ([A-Za-z0-9 &\\-]+)\\b",
-        r"regarding ([A-Za-z0-9 &\\-]+)\\b"
+        r"for ([A-Za-z0-9 &\-\']+)\b",
+        r"from ([A-Za-z0-9 &\-\']+)\b",
+        r"regarding ([A-Za-z0-9 &\-\']+)\b"
     ]
     for pat in patterns:
         m = re.search(pat, text, flags=re.IGNORECASE)

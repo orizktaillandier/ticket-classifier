@@ -3,7 +3,7 @@ import re
 import json
 import pandas as pd
 from openai import OpenAI
-from dealer_utils import preprocess_ticket
+from dealer_utils import preprocess_ticket, lookup_dealer_by_name
 from datetime import datetime
 
 # Initialize OpenAI client
@@ -11,17 +11,11 @@ client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 # Load dealer–rep mapping
 mapping_df = pd.read_csv("rep_dealer_mapping.csv")
-mapping_df["Dealer Name"] = (
-    mapping_df["Dealer Name"]
-    .astype(str)
-    .str.lower()
-    .str.strip()
-)
+mapping_df["Dealer Name"] = mapping_df["Dealer Name"].astype(str).str.lower().str.strip()
 dealer_to_rep = mapping_df.set_index("Dealer Name")["Rep Name"].to_dict()
 dealer_to_id  = mapping_df.set_index("Dealer Name")["Dealer ID"].to_dict()
 
 def lookup_dealer_by_name(name: str):
-    """Return dict with 'rep' and 'dealer_id' for a given dealer name."""
     n = name.lower().strip()
     return {
         "rep": dealer_to_rep.get(n, ""),
@@ -42,10 +36,6 @@ def detect_edge_case(message: str, zoho_fields=None):
     return ""
 
 def find_example_dealer(text: str):
-    """
-    If message says e.g. 'file from inventory+ for Maple Ridge Hyundai',
-    capture 'Maple Ridge Hyundai' dynamically.
-    """
     patterns = [
         r"for ([A-Za-z0-9 &\\-]+)\\b",
         r"from ([A-Za-z0-9 &\\-]+)\\b",
@@ -62,11 +52,9 @@ def classify_ticket(text: str, model="gpt-4o"):
     context = preprocess_ticket(text)
 
     # 2. Detect example-based dealer override
-    example = find_example_dealer(text)
-    if example:
-        override = lookup_dealer_by_name(example)
-    else:
-        override = {}
+    dealer_list = context.get("dealers_found", [])
+    example = dealer_list[0] if dealer_list else find_example_dealer(text)
+    override = lookup_dealer_by_name(example) if example else {}
 
     # 3. Build the system + user prompts
     FEMSHOT = """
@@ -119,14 +107,14 @@ Return a JSON object exactly as follows:
     resp = client.chat.completions.create(
         model=model,
         messages=[
-            {"role": "system",  "content": SYSTEM_PROMPT},
-            {"role": "user",    "content": USER_PROMPT},
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": USER_PROMPT},
         ],
         temperature=0.2,
     )
     raw = resp.choices[0].message.content.strip()
 
-    # 5. Strip any ``` fences and extract the JSON block
+    # 5. Clean JSON fences
     raw = re.sub(r"^```(?:json)?\s*", "", raw)
     raw = re.sub(r"\s*```$", "", raw)
     m = re.search(r"\{.*\}", raw, re.DOTALL)
@@ -138,23 +126,36 @@ Return a JSON object exactly as follows:
     data = json.loads(json_text)
     zf = data.get("zoho_fields", {})
 
-    # 7. Apply example override or lookup mapping
-    if example and override.get("dealer_id"):
+    # 7. Override dealer info from example if valid and not a group
+    if example and override.get("dealer_id") and "group" not in example.lower():
         zf["dealer_name"] = example
-        zf["dealer_id"]   = override["dealer_id"]
-        zf["rep"]         = override["rep"]
+        zf["dealer_id"] = override["dealer_id"]
+        zf["rep"] = override["rep"]
     else:
-        # if blank, fill in via mapping by name
+        # Otherwise try to lookup by classified dealer_name
         dn = zf.get("dealer_name", "").lower().strip()
         if dn in dealer_to_id:
             zf["dealer_id"] = dealer_to_id[dn]
-            zf["rep"]       = dealer_to_rep[dn]
+            zf["rep"] = dealer_to_rep[dn]
 
-    # 8. Always set contact = rep
+    # 8. Post-process fields
+    zf["dealer_name"] = zf.get("dealer_name", "").title()
     zf["contact"] = zf["rep"]
 
-    # 9. Edge-case detection
+    if zf.get("syndicator", "").lower() == "omni" and not zf.get("inventory_type"):
+        zf["inventory_type"] = "Used + New"
+
+    # 9. Format zoho_comment casing (optional cleanup)
+    if "zoho_comment" in data:
+        data["zoho_comment"] = data["zoho_comment"].replace(
+            zf["dealer_name"].lower(), zf["dealer_name"]
+        )
+
+    # 10. Edge-case detection
     data["edge_case"] = detect_edge_case(text, zf)
+
+    # 11. Strip reply for now
+    data.pop("suggested_reply", None)
 
     return data
 

@@ -13,6 +13,13 @@ mapping_df["Dealer Name"] = mapping_df["Dealer Name"].astype(str).str.lower().st
 dealer_to_rep = mapping_df.set_index("Dealer Name")["Rep Name"].to_dict()
 dealer_to_id  = mapping_df.set_index("Dealer Name")["Dealer ID"].astype(str).to_dict()
 
+def lookup_dealer_by_name(name: str):
+    n = name.lower().strip()
+    return {
+        "rep": dealer_to_rep.get(n, ""),
+        "dealer_id": dealer_to_id.get(n, "")
+    }
+
 def detect_edge_case(message: str, zoho_fields=None):
     text = message.lower()
     synd = (zoho_fields or {}).get("syndicator", "").lower()
@@ -31,14 +38,14 @@ def format_zoho_comment(zf, context):
     lines.append(f"{zf['dealer_name']} ({zf['dealer_id']})")
     lines.append(f"Rep: {zf['rep']}")
 
-    emails = re.findall(r"[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}", context["message"].lower())
-    dealer_emails = [e for e in emails if "@" in e]
-    if dealer_emails:
-        lines.append(f"Dealer contact: {dealer_emails[0]}")
+    dealer_emails = re.findall(r"[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}", context["message"].lower())
+    known = [e for e in dealer_emails if "kotauto" in e]
+    if known:
+        lines.append(f"Dealer contact: {known[0]}")
 
     synd = zf.get("syndicator", "").replace(".auto", "").title()
-    inv = zf.get("inventory_type") or "Used + New"
-    lines.append(f"Export: {synd} – {inv}")
+    invtype = zf.get("inventory_type") or "Used + New"
+    lines.append(f"Export: {synd} – {invtype}")
 
     lines.append("")
     lines.append("Client says exported trims are incomplete.")
@@ -48,10 +55,22 @@ def format_zoho_comment(zf, context):
 
     return "\n".join(lines)
 
+def find_example_dealer(text: str):
+    patterns = [
+        r"for ([A-Za-z0-9 &\\-]+)\\b",
+        r"from ([A-Za-z0-9 &\\-]+)\\b",
+        r"regarding ([A-Za-z0-9 &\\-]+)\\b"
+    ]
+    for pat in patterns:
+        m = re.search(pat, text, flags=re.IGNORECASE)
+        if m:
+            return m.group(1).strip()
+    return ""
+
 def classify_ticket(text: str, model="gpt-4o"):
     context = preprocess_ticket(text)
     dealer_list = context.get("dealers_found", [])
-    example = dealer_list[0] if dealer_list else ""
+    example = dealer_list[0] if dealer_list else find_example_dealer(text)
     override = lookup_dealer_by_name(example) if example else {}
 
     FEMSHOT = """
@@ -76,19 +95,15 @@ Zoho Fields:
         "- Category: Product Activation – New Client, Product Activation – Existing Client, Product Cancellation, Problem / Bug, General Question, Analysis / Review, Other.\n"
         "- Sub Category: Import, Export, Sales Data Import, FB Setup, Google Setup, Other Department, Other, AccuTrade.\n"
         "- Inventory Type: New, Used, Demo, New + Used, or blank.\n\n"
-        "Important logic rules (do not override):\n"
-        "- dealer_name, dealer_id, and rep must come from internal mapping — if uncertain, leave blank.\n"
-        "- Only use physical rooftop names, not group names like 'Kot Auto Group'.\n"
-        "- syndicator is the export destination (where D2C sends the feed), not a data source like Inventory+.\n"
-        "- Do not infer or guess values. Return only grounded field values.\n\n"
+        "Only return grounded field values. The 'syndicator' must refer to the export target (where D2C is sending the feed), not the source or origin of the data (like Inventory+ or DMS)."
         + FEMSHOT +
-        "\nNow classify the following message and return ONLY the JSON object (no explanation or extra text):"
+        "\nNow classify the following message and return ONLY the JSON object (no explanation, no extra text):"
     )
     USER_PROMPT = f"""
 Message:
 {text}
 
-Return exactly this JSON format:
+Return a JSON object exactly as follows:
 {{
   "zoho_fields": {{
     "contact": "...",
@@ -111,17 +126,19 @@ Return exactly this JSON format:
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": USER_PROMPT},
         ],
-        temperature=0.0,
+        temperature=0.2,
     )
     raw = resp.choices[0].message.content.strip()
     raw = re.sub(r"^```(?:json)?\s*", "", raw)
     raw = re.sub(r"\s*```$", "", raw)
     m = re.search(r"\{.*\}", raw, re.DOTALL)
     if not m:
-        raise ValueError("LLM output not valid JSON:\n" + raw)
-    data = json.loads(m.group(0))
+        raise ValueError("❌ LLM did not return valid JSON:\n" + raw)
+    json_text = m.group(0)
+    data = json.loads(json_text)
     zf = data.get("zoho_fields", {})
 
+    # Normalize and override
     dn_raw = zf.get("dealer_name", "")
     dn = re.sub(r"([a-z])([A-Z])", r"\1 \2", dn_raw).lower().strip()
     mapped_id = dealer_to_id.get(dn, "")
@@ -138,7 +155,7 @@ Return exactly this JSON format:
         zf["syndicator"] = context["syndicators"][0].title()
 
     zf["dealer_name"] = zf.get("dealer_name", "").title()
-    zf["contact"] = zf.get("rep", "")
+    zf["contact"] = zf["rep"]
 
     if zf.get("syndicator", "").lower() == "omni" and not zf.get("inventory_type"):
         zf["inventory_type"] = "Used + New"

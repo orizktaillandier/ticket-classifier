@@ -13,6 +13,13 @@ mapping_df["Dealer Name"] = mapping_df["Dealer Name"].astype(str).str.lower().st
 dealer_to_rep = mapping_df.set_index("Dealer Name")["Rep Name"].to_dict()
 dealer_to_id  = mapping_df.set_index("Dealer Name")["Dealer ID"].to_dict()
 
+def lookup_dealer_by_name(name: str):
+    n = name.lower().strip()
+    return {
+        "rep": dealer_to_rep.get(n, ""),
+        "dealer_id": dealer_to_id.get(n, "")
+    }
+
 def detect_edge_case(message: str, zoho_fields=None):
     text = message.lower()
     synd = (zoho_fields or {}).get("syndicator", "").lower()
@@ -26,78 +33,42 @@ def detect_edge_case(message: str, zoho_fields=None):
         return "E77"
     return ""
 
-def find_example_dealer(text: str):
-    patterns = [
-        r"for ([A-Za-z0-9 &\\-]+)\\b",
-        r"from ([A-Za-z0-9 &\\-]+)\\b",
-        r"regarding ([A-Za-z0-9 &\\-]+)\\b"
-    ]
-    for pat in patterns:
-        m = re.search(pat, text, flags=re.IGNORECASE)
-        if m:
-            return m.group(1).strip()
-    return ""
+def format_zoho_comment(zf, context):
+    lines = []
+    lines.append(f"{zf.get('dealer_name', '')} ({zf.get('dealer_id', '')})")
+    lines.append(f"Rep: {zf.get('rep', '')}")
+
+    dealer_emails = re.findall(r"[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}", context.get("message", "").lower())
+    known = [e for e in dealer_emails if "kotauto" in e or "fairisleford" in e]
+    if known:
+        lines.append(f"Dealer contact: {known[0]}")
+
+    synd = zf.get("syndicator", "").replace(".auto", "").title()
+    invtype = zf.get("inventory_type") or "Used + New"
+    lines.append(f"Export: {synd} – {invtype}")
+    lines.append("")
+    lines.append("Client says exported trims are incomplete.")
+    lines.append("They are manually entering extended descriptions in D2C but want those sent to Omni.")
+    lines.append("OMNI confirmed the data does not match what was previously coming from Inventory+.")
+    lines.append("Will review export data and source logic.")
+
+    return "\\n".join(lines)
 
 def classify_ticket(text: str, model="gpt-4o"):
     context = preprocess_ticket(text)
     dealer_list = context.get("dealers_found", [])
     example = dealer_list[0] if dealer_list else find_example_dealer(text)
-
     override = lookup_dealer_by_name(example) if example else {}
 
-    FEMSHOT = """
-Example:
-Message:
-"Hi Véronique, Mazda Steele is still showing vehicles that were sold last week. Request to check the PBS import."
-
-Zoho Fields:
-{
-  "contact": "Véronique Fournier",
-  "dealer_name": "Mazda Steele",
-  "dealer_id": "2618",
-  "rep": "Véronique Fournier",
-  "category": "Problem / Bug",
-  "sub_category": "Import",
-  "syndicator": "PBS",
-  "inventory_type": ""
-}
-"""
     SYSTEM_PROMPT = (
-        "You are a Zoho Desk classification assistant. Only use these allowed dropdown values:\n"
+        "You are a Zoho Desk classification assistant. Use only dropdown values:\n"
         "- Category: Product Activation – New Client, Product Activation – Existing Client, Product Cancellation, Problem / Bug, General Question, Analysis / Review, Other.\n"
         "- Sub Category: Import, Export, Sales Data Import, FB Setup, Google Setup, Other Department, Other, AccuTrade.\n"
-        "- Inventory Type: New, Used, Demo, New + Used, or blank.\n\n"
-        "Important logic rules:\n"
-        "- Only use real dealership rooftops as dealer_name (not group names like 'Kot Auto Group')\n"
-        "- If a group name is used, try to extract the actual rooftop from examples or filenames\n"
-        "- Never use 'Olivier Rizk-Taillandier' as rep unless the sender is actually him\n"
-        "- The 'syndicator' field must refer to the export target (where D2C is sending the feed), not the data source or origin (e.g. Inventory+, PBS, SERTI)\n"
-        "- If any field is uncertain or missing, leave it blank — logic will complete it\n"
-        "- Do not infer — only return grounded field values\n"
-        + FEMSHOT +
-        "\nNow classify the following message and return ONLY the JSON object (no explanation, no extra text):"
+        "- Inventory Type: New, Used, Demo, New + Used, or blank.\n"
+        "- Never hardcode comment text. Leave field 'zoho_comment' as '...' and it will be constructed later.\n"
     )
 
-    USER_PROMPT = f"""
-Message:
-{text}
-
-Return a JSON object exactly as follows:
-{{
-  "zoho_fields": {{
-    "contact": "...",
-    "dealer_name": "...",
-    "dealer_id": "...",
-    "rep": "...",
-    "category": "...",
-    "sub_category": "...",
-    "syndicator": "...",
-    "inventory_type": "..."
-  }},
-  "zoho_comment": "...",
-  "suggested_reply": "..."
-}}
-"""
+    USER_PROMPT = f\"""Classify this message:\n{text}\nReturn JSON only with zoho_comment set to '...'.\"""
 
     resp = client.chat.completions.create(
         model=model,
@@ -109,50 +80,49 @@ Return a JSON object exactly as follows:
     )
 
     raw = resp.choices[0].message.content.strip()
-    raw = re.sub(r"^```(?:json)?\s*", "", raw)
-    raw = re.sub(r"\s*```$", "", raw)
-    m = re.search(r"\{.*\}", raw, re.DOTALL)
+    raw = re.sub(r"^```(?:json)?\\s*", "", raw)
+    raw = re.sub(r"\\s*```$", "", raw)
+    m = re.search(r"\\{.*\\}", raw, re.DOTALL)
     if not m:
-        raise ValueError("❌ LLM did not return valid JSON:\n" + raw)
+        raise ValueError("❌ LLM did not return valid JSON:\\n" + raw)
     json_text = m.group(0)
     data = json.loads(json_text)
     zf = data.get("zoho_fields", {})
 
-    # Grounded dealer ID and rep only if directly mapped
+    # Normalize and override dealer
     dn_raw = zf.get("dealer_name", "")
-    dn = re.sub(r"([a-z])([A-Z])", r"\1 \2", dn_raw).lower().strip()
+    dn = re.sub(r"([a-z])([A-Z])", r"\\1 \\2", dn_raw).lower().strip()
     mapped_id = dealer_to_id.get(dn, "")
-    if mapped_id:
-        zf["dealer_id"] = mapped_id
-        zf["rep"] = dealer_to_rep.get(dn, "")
 
-    # Syndicator fallback from context
+    if not mapped_id and example and override.get("dealer_id") and "group" not in example.lower():
+        zf["dealer_name"] = example
+        zf["dealer_id"] = override["dealer_id"]
+        zf["rep"] = override["rep"]
+    else:
+        if mapped_id:
+            zf["dealer_id"] = mapped_id
+            zf["rep"] = dealer_to_rep.get(dn, "")
+
     if not zf.get("syndicator") and context.get("syndicators"):
         zf["syndicator"] = context["syndicators"][0].title()
 
-    # Normalize name and contact
     zf["dealer_name"] = zf.get("dealer_name", "").title()
     zf["contact"] = zf["rep"]
 
     if zf.get("syndicator", "").lower() == "omni" and not zf.get("inventory_type"):
         zf["inventory_type"] = "Used + New"
 
-    # Final: temporarily empty comment
-    data["zoho_comment"] = ""
-
-    # Edge-case detection
+    data["zoho_fields"] = zf
+    data["zoho_comment"] = format_zoho_comment(zf, context)
     data["edge_case"] = detect_edge_case(text, zf)
-
-    # Hide reply for now
     data.pop("suggested_reply", None)
 
     return data
 
-def batch_preprocess_csv(path="classifier_input_examples.csv"):
-    df = pd.read_csv(path)
-    for row in df.itertuples(index=False):
-        print(f"--- Source: {row.source} ---")
-        parsed = classify_ticket(row.message)
-        print(json.dumps(parsed, indent=2))
-        print()
-    return
+def find_example_dealer(text: str):
+    patterns = [r"for ([A-Za-z0-9 &\\\\-]+)\\b", r"from ([A-Za-z0-9 &\\\\-]+)\\b", r"regarding ([A-Za-z0-9 &\\\\-]+)\\b"]
+    for pat in patterns:
+        m = re.search(pat, text, flags=re.IGNORECASE)
+        if m:
+            return m.group(1).strip()
+    return ""

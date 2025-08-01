@@ -19,7 +19,7 @@ def classify_ticket(text: str, model="gpt-4o"):
     example = dealer_list[0] if dealer_list else find_example_dealer(text)
     override = lookup_dealer_by_name(example) if example else {}
 
-    FEMSHOT = \"\"\"
+    FEMSHOT = """
 Example:
 Message:
 "Hi Véronique, Mazda Steele is still showing vehicles that were sold last week. Request to check the PBS import."
@@ -35,25 +35,25 @@ Zoho Fields:
   "syndicator": "PBS",
   "inventory_type": ""
 }
-\"\"\"
+"""
 
     SYSTEM_PROMPT = (
-        "You are a Zoho Desk classification assistant. Only use these allowed dropdown values:\\n"
-        "- Category: Product Activation – New Client, Product Activation – Existing Client, Product Cancellation, Problem / Bug, General Question, Analysis / Review, Other.\\n"
-        "- Sub Category: Import, Export, Sales Data Import, FB Setup, Google Setup, Other Department, Other, AccuTrade.\\n"
-        "- Inventory Type: New, Used, Demo, New + Used, or blank.\\n\\n"
-        "Important logic rules:\\n"
-        "- Only use real dealership rooftops as dealer_name (not group names like 'Kot Auto Group')\\n"
-        "- If a group name is used, try to extract the actual rooftop from examples or filenames\\n"
-        "- Never use 'Olivier Rizk-Taillandier' as rep unless the sender is actually him\\n"
-        "- The 'syndicator' field must refer to the export target (where D2C is sending the feed), not the data source or origin (e.g. Inventory+, PBS, SERTI)\\n"
-        "- If any field is uncertain or missing, leave it blank — logic will complete it\\n"
-        "- Do not infer — only return grounded field values\\n"
+        "You are a Zoho Desk classification assistant. Only use these allowed dropdown values:\n"
+        "- Category: Product Activation – New Client, Product Activation – Existing Client, Product Cancellation, Problem / Bug, General Question, Analysis / Review, Other.\n"
+        "- Sub Category: Import, Export, Sales Data Import, FB Setup, Google Setup, Other Department, Other, AccuTrade.\n"
+        "- Inventory Type: New, Used, Demo, New + Used, or blank.\n\n"
+        "Important logic rules:\n"
+        "- Only use real dealership rooftops as dealer_name (not group names like 'Kot Auto Group')\n"
+        "- If a group name is used, try to extract the actual rooftop from examples or filenames\n"
+        "- Never use 'Olivier Rizk-Taillandier' as rep unless the sender is actually him\n"
+        "- The 'syndicator' field must refer to the export target (where D2C is sending the feed), not the data source or origin (e.g. Inventory+, PBS, SERTI)\n"
+        "- If any field is uncertain or missing, leave it blank — logic will complete it\n"
+        "- Do not infer — only return grounded field values\n"
         + FEMSHOT +
-        "\\nNow classify the following message and return ONLY the JSON object (no explanation, no extra text):"
+        "\nNow classify the following message and return ONLY the JSON object (no explanation, no extra text):"
     )
 
-    USER_PROMPT = f\"\"\"
+    USER_PROMPT = f"""
 Message:
 {text}
 
@@ -72,7 +72,7 @@ Return a JSON object exactly as follows:
   "zoho_comment": "...",
   "suggested_reply": "..."
 }}
-\"\"\"
+"""
 
     resp = client.chat.completions.create(
         model=model,
@@ -83,17 +83,18 @@ Return a JSON object exactly as follows:
         temperature=0.2,
     )
     raw = resp.choices[0].message.content.strip()
-    raw = re.sub(r"^```(?:json)?\\s*\\{", "{", raw)
-    raw = re.sub(r"\\s*```$", "", raw)
-    m = re.search(r"\\{.*\\}", raw, re.DOTALL)
+    raw = re.sub(r"^```(?:json)?\s*\{", "{", raw)
+    raw = re.sub(r"\s*```$", "", raw)
+    m = re.search(r"\{.*\}", raw, re.DOTALL)
     if not m:
-        raise ValueError("❌ LLM did not return valid JSON:\\n" + raw)
+        raise ValueError("❌ LLM did not return valid JSON:\n" + raw)
     json_text = m.group(0)
     data = json.loads(json_text)
     zf = data.get("zoho_fields", {})
 
+    # Normalize and override dealer
     dn_raw = zf.get("dealer_name", "")
-    dn = re.sub(r"([a-z])([A-Z])", r"\\1 \\2", dn_raw).lower().strip()
+    dn = re.sub(r"([a-z])([A-Z])", r"\1 \2", dn_raw).lower().strip()
     mapped_id = dealer_to_id.get(dn, "")
 
     if not mapped_id and example and override.get("dealer_id") and "group" not in example.lower():
@@ -122,9 +123,9 @@ Return a JSON object exactly as follows:
 
 def find_example_dealer(text: str):
     patterns = [
-        r"for ([A-Za-z0-9 &\\\\-]+)\\\\b",
-        r"from ([A-Za-z0-9 &\\\\-]+)\\\\b",
-        r"regarding ([A-Za-z0-9 &\\\\-]+)\\\\b"
+        r"for ([A-Za-z0-9 &\\-]+)\\b",
+        r"from ([A-Za-z0-9 &\\-]+)\\b",
+        r"regarding ([A-Za-z0-9 &\\-]+)\\b"
     ]
     for pat in patterns:
         m = re.search(pat, text, flags=re.IGNORECASE)

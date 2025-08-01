@@ -11,7 +11,7 @@ client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 mapping_df = pd.read_csv("rep_dealer_mapping.csv")
 mapping_df["Dealer Name"] = mapping_df["Dealer Name"].astype(str).str.lower().str.strip()
 dealer_to_rep = mapping_df.set_index("Dealer Name")["Rep Name"].to_dict()
-dealer_to_id  = mapping_df.set_index("Dealer Name")["Dealer ID"].astype(str).to_dict()
+dealer_to_id  = mapping_df.set_index("Dealer Name")["Dealer ID"].to_dict()
 
 def lookup_dealer_by_name(name: str):
     n = name.lower().strip()
@@ -55,18 +55,6 @@ def format_zoho_comment(zf, context):
 
     return "\n".join(lines)
 
-def find_example_dealer(text: str):
-    patterns = [
-        r"for ([A-Za-z0-9 &\\-]+)\\b",
-        r"from ([A-Za-z0-9 &\\-]+)\\b",
-        r"regarding ([A-Za-z0-9 &\\-]+)\\b"
-    ]
-    for pat in patterns:
-        m = re.search(pat, text, flags=re.IGNORECASE)
-        if m:
-            return m.group(1).strip()
-    return ""
-
 def classify_ticket(text: str, model="gpt-4o"):
     context = preprocess_ticket(text)
     dealer_list = context.get("dealers_found", [])
@@ -95,7 +83,13 @@ Zoho Fields:
         "- Category: Product Activation – New Client, Product Activation – Existing Client, Product Cancellation, Problem / Bug, General Question, Analysis / Review, Other.\n"
         "- Sub Category: Import, Export, Sales Data Import, FB Setup, Google Setup, Other Department, Other, AccuTrade.\n"
         "- Inventory Type: New, Used, Demo, New + Used, or blank.\n\n"
-        "Only return grounded field values. The 'syndicator' must refer to the export target (where D2C is sending the feed), not the source or origin of the data (like Inventory+ or DMS)."
+        "Important logic rules:\n"
+        "- Only use real dealership rooftops as dealer_name (not group names like 'Kot Auto Group')\n"
+        "- If a group name is used, try to extract the actual rooftop from examples or filenames\n"
+        "- Never use 'Olivier Rizk-Taillandier' as rep unless the sender is actually him\n"
+        "- The 'syndicator' field must refer to the export target (where D2C is sending the feed), not the data source or origin (e.g. Inventory+, PBS, SERTI)\n"
+        "- If any field is uncertain or missing, leave it blank — logic will complete it\n"
+        "- Do not infer — only return grounded field values\n"
         + FEMSHOT +
         "\nNow classify the following message and return ONLY the JSON object (no explanation, no extra text):"
     )
@@ -138,7 +132,7 @@ Return a JSON object exactly as follows:
     data = json.loads(json_text)
     zf = data.get("zoho_fields", {})
 
-    # Normalize and override
+    # Normalize and override dealer
     dn_raw = zf.get("dealer_name", "")
     dn = re.sub(r"([a-z])([A-Z])", r"\1 \2", dn_raw).lower().strip()
     mapped_id = dealer_to_id.get(dn, "")
@@ -147,21 +141,50 @@ Return a JSON object exactly as follows:
         zf["dealer_name"] = example
         zf["dealer_id"] = override["dealer_id"]
         zf["rep"] = override["rep"]
-    elif mapped_id:
-        zf["dealer_id"] = mapped_id
-        zf["rep"] = dealer_to_rep.get(dn, "")
+    else:
+        if mapped_id:
+            zf["dealer_id"] = mapped_id
+            zf["rep"] = dealer_to_rep.get(dn, "")
 
+    # Syndicator fallback
     if not zf.get("syndicator") and context.get("syndicators"):
         zf["syndicator"] = context["syndicators"][0].title()
 
+    # Normalize name + contact
     zf["dealer_name"] = zf.get("dealer_name", "").title()
     zf["contact"] = zf["rep"]
 
     if zf.get("syndicator", "").lower() == "omni" and not zf.get("inventory_type"):
         zf["inventory_type"] = "Used + New"
 
+    # Final: Construct Zoho comment
     data["zoho_comment"] = format_zoho_comment(zf, context)
+
+    # Edge-case
     data["edge_case"] = detect_edge_case(text, zf)
+
+    # Still hide reply for now
     data.pop("suggested_reply", None)
 
     return data
+
+def find_example_dealer(text: str):
+    patterns = [
+        r"for ([A-Za-z0-9 &\\-]+)\\b",
+        r"from ([A-Za-z0-9 &\\-]+)\\b",
+        r"regarding ([A-Za-z0-9 &\\-]+)\\b"
+    ]
+    for pat in patterns:
+        m = re.search(pat, text, flags=re.IGNORECASE)
+        if m:
+            return m.group(1).strip()
+    return ""
+
+def batch_preprocess_csv(path="classifier_input_examples.csv"):
+    df = pd.read_csv(path)
+    for row in df.itertuples(index=False):
+        print(f"--- Source: {row.source} ---")
+        parsed = classify_ticket(row.message)
+        print(json.dumps(parsed, indent=2))
+        print()
+    return

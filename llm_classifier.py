@@ -46,13 +46,11 @@ def find_example_dealer(text: str):
     return ""
 
 def classify_ticket(text: str, model="gpt-4o"):
-    # Step 1: Preprocess
     context = preprocess_ticket(text)
     dealer_list = context.get("dealers_found", [])
     example = dealer_list[0] if dealer_list else find_example_dealer(text)
     override = lookup_dealer_by_name(example) if example else {}
 
-    # Step 2: Prompt
     FEMSHOT = """
 Example:
 Message:
@@ -79,6 +77,7 @@ Zoho Fields:
         "- Only use real dealership rooftops as dealer_name (not group names like 'Kot Auto Group')\n"
         "- If a group name is used, try to extract the actual rooftop from examples or filenames\n"
         "- Never use 'Olivier Rizk-Taillandier' as rep unless the sender is actually him\n"
+        "- The 'syndicator' field must refer to the export target (where D2C is sending the feed), not the data source or origin (e.g. Inventory+, PBS, SERTI)\n"
         "- If any field is uncertain or missing, leave it blank — logic will complete it\n"
         "- Do not infer — only return grounded field values\n"
         + FEMSHOT +
@@ -105,7 +104,6 @@ Return a JSON object exactly as follows:
 }}
 """
 
-    # Step 3: Call OpenAI
     resp = client.chat.completions.create(
         model=model,
         messages=[
@@ -124,9 +122,9 @@ Return a JSON object exactly as follows:
     data = json.loads(json_text)
     zf = data.get("zoho_fields", {})
 
-    # Step 4: Normalize and override dealer if needed
+    # Dealer fallback logic
     dn_raw = zf.get("dealer_name", "")
-    dn = re.sub(r"([a-z])([A-Z])", r"\1 \2", dn_raw).lower().strip()  # fix e.g. Mapleridge
+    dn = re.sub(r"([a-z])([A-Z])", r"\1 \2", dn_raw).lower().strip()
     mapped_id = dealer_to_id.get(dn, "")
 
     if not mapped_id and example and override.get("dealer_id") and "group" not in example.lower():
@@ -138,27 +136,23 @@ Return a JSON object exactly as follows:
             zf["dealer_id"] = mapped_id
             zf["rep"] = dealer_to_rep.get(dn, "")
 
-    # Step 5: Syndicator fallback
+    # Syndicator backup
     if not zf.get("syndicator") and context.get("syndicators"):
         zf["syndicator"] = context["syndicators"][0].title()
 
-    # Step 6: Normalize name + contact
+    # Normalize
     zf["dealer_name"] = zf.get("dealer_name", "").title()
     zf["contact"] = zf["rep"]
 
     if zf.get("syndicator", "").lower() == "omni" and not zf.get("inventory_type"):
         zf["inventory_type"] = "Used + New"
 
-    # Step 7: Fix casing in comment
     if "zoho_comment" in data:
         data["zoho_comment"] = data["zoho_comment"].replace(
             zf["dealer_name"].lower(), zf["dealer_name"]
         )
 
-    # Step 8: Edge case detection
     data["edge_case"] = detect_edge_case(text, zf)
-
-    # Step 9: Strip reply for now
     data.pop("suggested_reply", None)
 
     return data

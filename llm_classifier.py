@@ -59,12 +59,34 @@ def extract_best_dealer(context, raw_message):
     candidates = [c for c in candidates if c] + [raw_message]
     return robust_dealer_match(candidates)
 
+def find_example_dealer(ticket_message):
+    """
+    Looks for patterns like 'for Maple Ridge Hyundai' as the example dealer for the ticket.
+    Returns the best-matched dealer from mapping if found, else (None, None, None).
+    """
+    # Looks for phrases like "...for Maple Ridge Hyundai", etc.
+    matches = re.findall(r'for ([A-Za-z0-9 &\-\']+)', ticket_message)
+    if matches:
+        for candidate in matches:
+            dealer_name, rep, dealer_id = robust_dealer_match([candidate])
+            if dealer_id:
+                return dealer_name, rep, dealer_id
+    return None, None, None
+
 def extract_syndicator(text):
     known = [
         "vauto", "easydeal", "car media", "icc", "homenet", "serti",
         "evolutionautomobiles", "spincar", "trader", "pbs", "omni"
     ]
     lower = text.lower()
+    # Prefer "to [syndicator]" pattern for export target
+    match = re.search(r'to ([a-z0-9 .\-]+)', lower)
+    if match:
+        candidate = match.group(1).strip()
+        for s in known:
+            if s in candidate:
+                return s.title() if s != "icc" else "ICC"
+    # Fallback to previous logic
     for s in known:
         if re.search(rf"\b{s}\b", lower):
             return s.title() if s != "icc" else "ICC"
@@ -168,7 +190,11 @@ def classify_ticket(ticket_message):
     context = preprocess_ticket(ticket_message)
     fields = {}
 
-    dealer_name, rep, dealer_id = extract_best_dealer(context, ticket_message)
+    # Enhanced: Try to extract "example" dealer from text context first
+    dealer_name, rep, dealer_id = find_example_dealer(ticket_message)
+    if not dealer_id:
+        dealer_name, rep, dealer_id = extract_best_dealer(context, ticket_message)
+
     if dealer_id and rep and dealer_name:
         fields["dealer_name"] = dealer_name
         fields["dealer_id"] = dealer_id

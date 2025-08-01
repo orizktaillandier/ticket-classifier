@@ -34,8 +34,8 @@ if st.button("Classify Ticket"):
             st.subheader("📝 Zoho Comment")
             st.code(result["zoho_comment"], language="markdown")
 
-            st.subheader("✉️ Suggested Reply")
-            st.code(result["suggested_reply"], language="markdown")
+            #st.subheader("✉️ Suggested Reply")
+            #st.code(result["suggested_reply"], language="markdown")
 
         except Exception as e:
             st.error("❌ An unexpected error occurred.")

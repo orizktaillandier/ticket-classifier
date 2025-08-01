@@ -1,4 +1,3 @@
-
 import os
 import json
 import re
@@ -69,8 +68,6 @@ def extract_syndicator(text):
     for s in known:
         if re.search(rf"\b{s}\b", lower):
             return s.title() if s != "icc" else "ICC"
-    if "partial" in text and "trim" in text and "inventory+" in text and "omni" in text:
-        return "E77"
     return ""
 
 def validate_fields(fields):
@@ -96,7 +93,7 @@ def detect_edge_case(message, zoho_fields=None):
     syndicator = (zoho_fields or {}).get("syndicator", "").lower() if zoho_fields else ""
     if ("trader" in text or syndicator == "trader") and ("used" in text and "new" in text):
         return "E55"
-    re.search(r"(stock number|stock#).*?[<>\'\"\\]", text):
+    if re.search(r"(stock number|stock#).*?[<>\'\"\\]", text):
         return "E44"
     if "firewall" in text or "your request was rejected by d2c media's firewall" in text:
         return "E74"
@@ -162,18 +159,8 @@ Return a JSON object:
         raise ValueError(f"❌ No JSON block found in response:\n{content}")
     result = json.loads(match.group(0))
 
-    zf = result.get("zoho_fields", {})
-    comment_parts = []
-    if zf.get("dealer_name"):
-        comment_parts.append(zf["dealer_name"])
-    if zf.get("category"):
-        comment_parts.append(zf["category"])
-    if zf.get("sub_category"):
-        comment_parts.append(f"Issue: {zf['sub_category']}")
-    if zf.get("syndicator"):
-        comment_parts.append(f"Syndicator: {zf['syndicator']}")
-    comment_parts.append("Will investigate.")
-    result["zoho_comment"] = "\n".join(comment_parts)
+    # Use LLM-generated Zoho comment as-is
+    result["zoho_comment"] = result.get("zoho_comment", "").strip()
 
     return result
 
@@ -182,34 +169,22 @@ def classify_ticket(ticket_message):
     fields = {}
 
     dealer_name, rep, dealer_id = extract_best_dealer(context, ticket_message)
-    # Kot Auto Group override logic
-    msg = ticket_message.lower()
-    if "maple ridge hyundai" in msg:
-        dealer_name, dealer_id = "Maple Ridge Hyundai", "4043"
-    elif "genesis victoria" in msg:
-        dealer_name, dealer_id = "Genesis Victoria", "5253"
-    elif "kot auto group" in msg:
-        dealer_name, dealer_id = "Kot Auto Group", "4104"
-    else:
-        dealer_name, dealer_id = dealer_name, dealer_id
-    fields["dealer_name"] = dealer_name
-    fields["dealer_id"] = dealer_id
-
     if dealer_id and rep and dealer_name:
         fields["dealer_name"] = dealer_name
         fields["dealer_id"] = dealer_id
         fields["rep"] = rep
+        # Only assign client name if it's a valid dealer email
         if re.search(r"@(kotautogroup\.com|dealer\.com|auto\.ca|cars\.com)$", ticket_message.lower()):
-        fields["contact"] = context.get("sender_name", rep)
-    else:
-        fields["contact"] = rep
+            fields["contact"] = context.get("sender_name", rep)
+        else:
+            fields["contact"] = rep
     else:
         fields["dealer_name"] = ""
         fields["dealer_id"] = ""
         fields["rep"] = ""
         fields["contact"] = ""
 
-    fields["syndicator"] = "Omni" if "omni" in ticket_message.lower() else extract_syndicator(ticket_message)
+    fields["syndicator"] = extract_syndicator(ticket_message)
     fields["inventory_type"] = next(
         (k.capitalize() for k in ["new + used", "new", "used", "demo"] if k in ticket_message.lower()), ""
     )

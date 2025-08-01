@@ -116,6 +116,7 @@ def detect_edge_case(message: str, zoho_fields=None):
     return ""
 
 def format_zoho_comment(zf, context):
+    print("=== USING THE NEW UNIVERSAL COMMENT FUNCTION ===")
     lines = []
     category = zf.get('category', '').lower()
     sub_category = zf.get('sub_category', '').lower()

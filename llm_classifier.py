@@ -1,13 +1,13 @@
 import os
 import re
 import json
-import openai
 import pandas as pd
+from openai import OpenAI
 from dealer_utils import preprocess_ticket
 from datetime import datetime
 
 # Initialize OpenAI client
-openai.api_key = os.getenv("OPENAI_API_KEY")
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 # Load dealer–rep mapping
 mapping_df = pd.read_csv("rep_dealer_mapping.csv")
@@ -87,7 +87,7 @@ Return a JSON object:
 """
 
     # Call OpenAI
-    resp = openai.ChatCompletion.create(
+    resp = client.chat.completions.create(
         model=model,
         messages=[
             {"role": "system",  "content": SYSTEM_PROMPT},
@@ -98,10 +98,8 @@ Return a JSON object:
     raw = resp.choices[0].message.content.strip()
 
     # Strip Markdown fences and extract JSON block
-    # 1) Remove leading/trailing ```json or ```
     raw = re.sub(r"^```(?:json)?\s*", "", raw)
     raw = re.sub(r"\s*```$", "", raw)
-    # 2) Extract JSON {...}
     m = re.search(r"\{.*\}", raw, re.DOTALL)
     if not m:
         raise ValueError("❌ LLM did not return valid JSON:\n" + raw)

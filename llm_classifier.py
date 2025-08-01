@@ -53,6 +53,30 @@ def detect_edge_case(message, zoho_fields=None):
     return ""
 
 def classify_ticket_llm(ticket_message, context=None, model="gpt-4o"):
+    def classify_ticket_llm(text, model="gpt-4"):
+    context = preprocess_ticket(text)
+    messages = build_prompt(text, context)
+    
+    response = client.chat.completions.create(
+        model=model,
+        temperature=0.2,
+        messages=messages
+    )
+    
+    raw = response.choices[0].message.content.strip()
+
+    # Optional: write to log or print for debug
+    print("=== RAW LLM OUTPUT ===")
+    print(raw)
+
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        # fallback: wrap in braces if needed or raise clean error
+        raise ValueError("LLM did not return valid JSON. Full output:\n" + raw)
+
+    return parsed
+
     FEMSHOT = """
 Example:
 Message:

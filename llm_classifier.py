@@ -1,7 +1,7 @@
 import re
 import openai
 import json
-from utils import lookup_dealer_by_name
+from dealer_utils import lookup_dealer_by_name
 
 client = openai.OpenAI()
 

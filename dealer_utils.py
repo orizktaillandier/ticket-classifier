@@ -33,24 +33,32 @@ def extract_contacts(text):
     return ""
 
 def extract_dealers(text):
-    dealer_matches = re.findall(
-        r"\\b(?:mazda|toyota|honda|chevrolet|hyundai|genesis|ford|ram|gmc|acura|jeep"
-        r"|buick|nissan|volvo|subaru|volkswagen|kia|mitsubishi|infiniti|lexus"
-        r"|cadillac|dodge|mini|jaguar|land rover|bmw|mercedes|audi|porsche|tesla)"
-        r"[a-zé\\-\\s]*\\b", text.lower()
-    )
-    INVALID_SUFFIXES = {"units", "inventory", "vehicles", "images", "stock"}
-
-    cleaned = []
-    for d in dealer_matches:
-        d_clean = d.strip()
-        if d_clean in DEALER_BLOCKLIST:
-            continue
-        parts = d_clean.split()
-        if parts and parts[-1] not in INVALID_SUFFIXES:
-            cleaned.append(d_clean)
-
-    return list(set(cleaned))
+    # 1. Look for "Dealership Name: ..." or similar
+    lines = text.split('\n')
+    extracted = []
+    for line in lines:
+        m = re.search(r"(Dealership Name|Dealer Name|Dealer)\s*[:\-]?\s*([A-Za-z0-9 &'\-]+)", line, re.IGNORECASE)
+        if m:
+            candidate = m.group(2).strip()
+            if candidate:
+                extracted.append(candidate.lower())
+    # 2. Fall back to old OEM matcher
+    if not extracted:
+        dealer_matches = re.findall(
+            r"\b(?:mazda|toyota|honda|chevrolet|hyundai|genesis|ford|ram|gmc|acura|jeep"
+            r"|buick|nissan|volvo|subaru|volkswagen|kia|mitsubishi|infiniti|lexus"
+            r"|cadillac|dodge|mini|jaguar|land rover|bmw|mercedes|audi|porsche|tesla)"
+            r"[a-zé\-\s]*\b", text.lower()
+        )
+        INVALID_SUFFIXES = {"units", "inventory", "vehicles", "images", "stock"}
+        cleaned = []
+        for d in dealer_matches:
+            d_clean = d.strip()
+            parts = d_clean.split()
+            if parts and parts[-1] not in INVALID_SUFFIXES:
+                cleaned.append(d_clean)
+        extracted = list(set(cleaned))
+    return extracted
 
 def extract_syndicators(text):
     candidates = [

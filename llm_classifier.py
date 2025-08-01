@@ -49,28 +49,30 @@ Zoho Fields:
         "- The 'syndicator' field must refer to the export target (where D2C is sending the feed), not the data source or origin (e.g. Inventory+, PBS, SERTI)\n"
         "- If any field is uncertain or missing, leave it blank — logic will complete it\n"
         "- Do not infer — only return grounded field values\n"
+        "- Return a JSON object with ALL keys present and fill missing keys with empty string.\n"
+        "- Do NOT include any explanations or extra text outside the JSON.\n"
         + FEMSHOT +
-        "\nNow classify the following message and return ONLY the JSON object (no explanation, no extra text):"
+        "\nNow classify the following message and return ONLY the JSON object as exactly specified:"
     )
 
     USER_PROMPT = f"""
 Message:
 {text}
 
-Return a JSON object exactly as follows:
+Return a JSON object exactly as follows, with ALL keys present (use empty strings if unknown):
 {{
   "zoho_fields": {{
-    "contact": "...",
-    "dealer_name": "...",
-    "dealer_id": "...",
-    "rep": "...",
-    "category": "...",
-    "sub_category": "...",
-    "syndicator": "...",
-    "inventory_type": "..."
+    "contact": "",
+    "dealer_name": "",
+    "dealer_id": "",
+    "rep": "",
+    "category": "",
+    "sub_category": "",
+    "syndicator": "",
+    "inventory_type": ""
   }},
-  "zoho_comment": "...",
-  "suggested_reply": "..."
+  "zoho_comment": "",
+  "suggested_reply": ""
 }}
 """
 
@@ -88,7 +90,7 @@ Return a JSON object exactly as follows:
     except Exception as e:
         print("❌ LLM call failed:", repr(e))
         return {"error": str(e)}
-    raw = resp.choices[0].message.content.strip()
+
     raw = re.sub(r"^```(?:json)?\s*\{", "{", raw)
     raw = re.sub(r"\s*```$", "", raw)
     m = re.search(r"\{.*\}", raw, re.DOTALL)
@@ -96,39 +98,52 @@ Return a JSON object exactly as follows:
         raise ValueError("❌ LLM did not return valid JSON:\n" + raw)
     json_text = m.group(0)
     data = json.loads(json_text)
+    print("PARSED JSON:", data)
+
     zf = data.get("zoho_fields", {})
 
-    # --- Dealer name normalization & mapping ---
-    # 1. Normalize the LLM output dealer_name (if present)
+    # Ensure all keys exist and are strings
+    expected_keys = [
+        "contact", "dealer_name", "dealer_id", "rep",
+        "category", "sub_category", "syndicator", "inventory_type"
+    ]
+    for key in expected_keys:
+        if key not in zf or not isinstance(zf[key], str):
+            zf[key] = ""
+
+    # Normalize dealer name for mapping
     dn_raw = zf.get("dealer_name", "")
     dn = re.sub(r"([a-z])([A-Z])", r"\1 \2", dn_raw).lower().strip()
+
     mapped_id = dealer_to_id.get(dn, "")
     mapped_rep = dealer_to_rep.get(dn, "")
 
-    # 2. If not found, try example/fallback
+    # If no valid mapping but example from context exists, use it
     if not mapped_id and example:
         fallback_override = lookup_dealer_by_name(example)
         if fallback_override:
             zf["dealer_name"] = example.title()
             zf["dealer_id"] = fallback_override["dealer_id"]
             zf["rep"] = fallback_override["rep"]
+        else:
+            zf["dealer_id"] = ""
+            zf["rep"] = ""
     else:
-        # 3. If mapped, override the LLM output with repmap values
+        # Override with mapping if found
         if mapped_id:
             zf["dealer_id"] = mapped_id
         if mapped_rep:
             zf["rep"] = mapped_rep
 
-    # 4. If not found at all, leave blank (never guess)
-    # 5. Use first detected rep as contact unless direct from client (not handled here)
+    # Final normalization
     zf["dealer_name"] = zf.get("dealer_name", "").title()
     zf["contact"] = zf.get("rep", "")
 
-    # 6. Syndicator: If not found but detected by logic, use that (never hardcode)
+    # Syndicator fallback if missing and detected in context
     if not zf.get("syndicator") and context.get("syndicators"):
         zf["syndicator"] = context["syndicators"][0].title()
 
-    # 7. Compose the comment, edge case
+    # Compose zoho comment and detect edge case
     data["zoho_comment"] = format_zoho_comment(zf, context)
     data["edge_case"] = detect_edge_case(text, zf)
     data.pop("suggested_reply", None)

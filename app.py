@@ -96,7 +96,7 @@ def detect_edge_case(message, zoho_fields=None):
     syndicator = (zoho_fields or {}).get("syndicator", "").lower() if zoho_fields else ""
     if ("trader" in text or syndicator == "trader") and ("used" in text and "new" in text):
         return "E55"
-    re.search(r"(stock number|stock#).*?[<>\';\"\\]", text):
+    re.search(r"(stock number|stock#).*?[<>\';\"\\\\]", text):
         return "E44"
     if "firewall" in text or "your request was rejected by d2c media's firewall" in text:
         return "E74"

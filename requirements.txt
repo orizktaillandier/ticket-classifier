@@ -3,3 +3,4 @@ streamlit
 pandas
 fuzzywuzzy
 python-dotenv
+nltk

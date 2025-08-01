@@ -74,16 +74,20 @@ Return a JSON object exactly as follows:
 }}
 """
 
-    resp = client.chat.completions.create(
-        model=model,
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": USER_PROMPT},
-        ],
-        temperature=0.2,
-    )
-    print("RAW LLM OUTPUT:", raw)
-    print("PARSED JSON:", data)
+    try:
+        resp = client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": USER_PROMPT},
+            ],
+            temperature=0.2,
+        )
+        raw = resp.choices[0].message.content.strip()
+        print("RAW LLM OUTPUT:", raw)
+    except Exception as e:
+        print("❌ LLM call failed:", repr(e))
+        return {"error": str(e)}
     raw = resp.choices[0].message.content.strip()
     raw = re.sub(r"^```(?:json)?\s*\{", "{", raw)
     raw = re.sub(r"\s*```$", "", raw)

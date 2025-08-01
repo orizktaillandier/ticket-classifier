@@ -1,0 +1,67 @@
+Contact,Dealer Name,Dealer ID,Category,Sub Category,Syndicator,Inventory Type,Zoho Comment,Suggested Reply
+Sophie,Chomedey Toyota,,Problem / Bug,Export,vAuto,Used,"Chomedey Toyota
+Rep:
+Client signale des unités usagées manquantes dans l’export vAuto.
+Demandent vérification.","Hi Sophie,
+
+Thanks for reaching out.
+I will take a look and follow up shortly.
+
+Let me know if there’s anything else.
+
+Thanks,
+Olivier"
+Mélanie,Mazda Trois-Rivières,,Problem / Bug,Import,EasyDeal,New,"Mazda Trois-Rivières
+Rep:
+Images des véhicules neufs ne se mettent pas à jour.
+Import EasyDeal.","Bonjour Mélanie,
+
+Merci pour votre message.
+Je vais vérifier la situation et vous revenir sous peu.
+
+N’hésitez pas si vous avez d’autres questions.
+
+Merci,
+Olivier"
+Leo,South Centre VW,,Product Cancellation,Export,Car Media,Both,"South Centre VW
+Rep:
+Client demande l’arrêt de l’export Car Media.
+Changement de fournisseur.","Hi Leo,
+
+Thanks for confirming. I will proceed with cancelling the Car Media export.
+
+Let me know if anything else comes up.
+
+Thanks,
+Olivier"
+Carl,Kawasaki Sud,,Product Activation – Existing Client,Export,ICC,Powersports,"Kawasaki Sud
+Rep:
+Client souhaite activer un export Powersports vers ICC.
+Attend nos instructions.","Hi Carl,
+
+Thanks for reaching out.
+To get started, can you confirm if you have an FTP destination we should use for the ICC feed?
+
+Let me know if you need an example of the format.
+
+Thanks,
+Olivier"
+Lisa,,,Problem / Bug,Import,HomeNet,Used,"Dealer (Certified Honda)
+Rep: Lisa
+Images manuelles supprimées ou écrasées après upload.
+Import HomeNet.","Hi Lisa,
+
+Thanks for letting us know.
+We will take a closer look at the image behavior and follow up shortly.
+
+Thanks,
+Olivier"
+Julie,Groupe Olivier,,General Question,Import,"SERTI, EvolutionAutomobiles",Both,"Groupe Olivier
+Rep: Julie
+Client veut savoir quel import gère les prix entre SERTI et EvolutionAutomobiles.","Hi Julie,
+
+Thanks for your message.
+I will check which import is currently active for pricing and get back to you shortly.
+
+Thanks,
+Olivier"

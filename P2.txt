@@ -1,0 +1,95 @@
+Here’s a **clean, actionable punch‑list for Phase 2**, followed by real confirmation that Zoho Desk and Zendesk *both* offer APIs to pull ticket data:
+
+---
+
+## 🗂️ Phase 2 Design & Automation Plan
+
+### ✅ Step 1: Confirm API Access & Authentication
+
+* **Zoho Desk** provides **REST APIs** to fetch or update ticket, contact, organization data and also supports **webhooks** for real‑time events (ticket created, updated) and **extension invoke API** for authenticated calls ([Zoho][1])
+* **Zendesk** offers a rich **Ticketing API (v2)** with endpoints for tickets, users, organizations, comments, and supports authentication via OAuth or API tokens ([developer.zendesk.com][2])
+
+**Next Action**: Verify which platform you're using, locate org/subdomain IDs and set up API token or OAuth credentials.
+
+---
+
+### ✅ Step 2: Define Integration Mode (Polling vs Webhook)
+
+* **Webhook approach** (recommended): Zoho Desk supports webhooks to notify your service when a new ticket arrives; event payload includes ticket metadata and consumer information ([Zoho][1])
+* **Pull (POST or GET)**: Fallback option using REST GET on `/api/v1/tickets` (Zoho) or `/api/v2/tickets` (Zendesk) at intervals for batch processing
+
+**Next Action**: Decide whether you want real-time trigger or scheduled batch fetch based on volume and immediacy.
+
+---
+
+### ✅ Step 3: Build Secure Ticket Fetch Module
+
+* **Zoho**: Use the **Invoke API** for proxy calls from within Desk extensions or external services with hashed payload authentication ([Zoho][3])
+* **Zendesk**: Use standard REST endpoints like `/api/v2/tickets.json` with OAuth API token authentication
+
+**Next Action**: Draft basic Python/Node fetch module with auth, rate-limit handling, error retries.
+
+---
+
+### ✅ Step 4: Integrate Ticket Classifier
+
+* Pull raw ticket content (body, subject, from/to) from API
+* Run your **classification logic** (current CLI version) — map fields, auto‑detect edge cases, generate comments/replies
+* Store classifier output and log entry either to Zoho ticket as comment or locally as JSONL
+
+**Next Action**: Connect `classify_ticket()` to fetched ticket body, then send reply/comment back where needed.
+
+---
+
+### ✅ Step 5: Logging, Audit, & Review Interface
+
+* Continue using `ticket_classifier_log.jsonl` for audit logs
+* Optionally build a lightweight dashboard (Flask/Streamlit) to review flagged edge cases, override classifications, or view log history
+
+**Next Action**: Design minimal logging schema and UX for QA review and overrides.
+
+---
+
+### ✅ Step 6: UI for Non-CLI Interaction
+
+* Decide platform: internal **web app**, browser extension, or embedding as Zoho/Zendesk custom app
+* Provide UI for: viewing inference result, editing fields, approving classifier suggestions, managing dealer mappings
+
+**Next Action**: Sketch rough UI flows; determine if multi-user access or sharing is needed.
+
+---
+
+## 📌 Summary Table
+
+| Phase | Task                                   | Outcome                                         |
+| ----- | -------------------------------------- | ----------------------------------------------- |
+| 2A    | Set up API auth for Zoho or Zendesk    | Ability to fetch tickets programmatically       |
+| 2B    | Enable webhooks or set polling logic   | Real‑time or scheduled ticket ingestion         |
+| 2C    | Connect fetched ticket to classifier   | Automatic field extraction + comment generation |
+| 2D    | Store logs and review edge cases       | QA audit and correction interface               |
+| 2E    | UI for classification review & mapping | Non‑CLI interaction and team use                |
+
+---
+
+## ✅ Proof that an API exists
+
+* **Zoho Desk REST APIs** allow full access to ticket and contact modules via OAuth or API; they are documented in Zoho’s Developer space ([developer.zendesk.com][2], [Zoho][3], [Zoho][1], [developer.zendesk.com][4], [help.zoho.com][5])
+* **Zoho** also supports **Desk Invoke API** for extensions needing secure calls inside Desk context ([Zoho][3])
+* **Zendesk** offers a full Ticketing API v2 under `/api/v2/tickets`, with official documentation, guides, and SDKs ([developer.zendesk.com][6], [developer.zendesk.com][2])
+
+---
+
+Would you like me to:
+
+1. Draft a starter module (Python script) for **authenticating and fetching tickets** from either Zoho or Zendesk?
+2. Generate sample webhook handler (for Zoho) or polling client (for Zendesk)?
+3. Sketch the basic UI interface flow for review?
+
+Let me know which one you’d like to kick off first!
+
+[1]: https://desk.zoho.com/support/WebhookDocument.do?utm_source=chatgpt.com "Zoho Desk Webhook Documentation"
+[2]: https://developer.zendesk.com/api-reference/ticketing/introduction/?utm_source=chatgpt.com "Ticketing - Zendesk Developer Docs"
+[3]: https://www.zoho.com/desk/extensions/guide/desk-invoke-api.html?utm_source=chatgpt.com "Desk Invoke API | Extension Guide - Zoho"
+[4]: https://developer.zendesk.com/api-reference/introduction/introduction/?utm_source=chatgpt.com "Introduction - Zendesk Developer Docs"
+[5]: https://help.zoho.com/portal/en/kb/desk/developer-space/rest-apis/articles/overview-of-rest-apis?utm_source=chatgpt.com "Overview of Rest APIs - Zoho Desk Knowledgebase"
+[6]: https://developer.zendesk.com/api-reference/ticketing/tickets/tickets/?utm_source=chatgpt.com "Tickets - Zendesk Developer Docs"

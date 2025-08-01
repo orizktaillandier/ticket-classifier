@@ -115,15 +115,18 @@ Return a JSON object exactly as follows:
     data = json.loads(json_text)
     zf = data.get("zoho_fields", {})
 
-    if example and override.get("dealer_id") and "group" not in example.lower():
+    dn = zf.get("dealer_name", "").lower().strip()
+    mapped_id = dealer_to_id.get(dn, "")
+
+    # If LLM returned an unmapped dealer_name, and override is better → use override
+    if not mapped_id and example and override.get("dealer_id") and "group" not in example.lower():
         zf["dealer_name"] = example
         zf["dealer_id"] = override["dealer_id"]
         zf["rep"] = override["rep"]
     else:
-        dn = zf.get("dealer_name", "").lower().strip()
-        if dn in dealer_to_id:
-            zf["dealer_id"] = dealer_to_id[dn]
-            zf["rep"] = dealer_to_rep[dn]
+        if mapped_id:
+            zf["dealer_id"] = mapped_id
+            zf["rep"] = dealer_to_rep.get(dn, "")
 
     # Fallback syndicator if LLM missed it
     if not zf.get("syndicator") and context.get("syndicators"):

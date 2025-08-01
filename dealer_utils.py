@@ -5,7 +5,6 @@ import pandas as pd
 
 nltk.download("punkt", quiet=True)
 
-# Blocklist for system terms that look like dealers but are not
 DEALER_BLOCKLIST = {"blue admin", "admin blue", "admin red", "d2c media", "cars commerce"}
 
 def detect_language(text):
@@ -40,7 +39,7 @@ def extract_dealers(text):
         r"\b(?:mazda|toyota|honda|chevrolet|hyundai|genesis|ford|ram|gmc|acura|jeep"
         r"|buick|nissan|volvo|subaru|volkswagen|kia|mitsubishi|infiniti|lexus"
         r"|cadillac|dodge|mini|jaguar|land rover|bmw|mercedes|audi|porsche|tesla)"
-        r"[a-zé\-\s]*\b", text.lower()
+        r"[a-zé\-\s]*", text.lower()
     )
     INVALID_SUFFIXES = {"units", "inventory", "vehicles", "images", "stock"}
 
@@ -51,7 +50,8 @@ def extract_dealers(text):
             continue
         parts = d_clean.split()
         if parts and parts[-1] not in INVALID_SUFFIXES:
-            cleaned.append(d_clean)
+            d_clean = re.sub(r"([a-z])([A-Z])", r"\1 \2", d_clean)  # split camel case
+            cleaned.append(d_clean.strip())
 
     return list(set(cleaned))
 
@@ -95,7 +95,7 @@ def batch_preprocess_csv(path="classifier_input_examples.csv"):
     return results
 
 def lookup_dealer_by_name(name, csv_path="rep_dealer_mapping.csv"):
-    name = name.lower().strip()
+    name = re.sub(r"([a-z])([A-Z])", r"\1 \2", name).lower().strip()
     df = pd.read_csv(csv_path)
     df["Dealer Name"] = df["Dealer Name"].str.lower().str.strip()
 

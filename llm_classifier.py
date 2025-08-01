@@ -15,13 +15,11 @@ dealer_to_id  = mapping_df.set_index("Dealer Name")["Dealer ID"].to_dict()
 
 def classify_ticket(text: str, model="gpt-4o"):
     context = preprocess_ticket(text)
-    # Debug print
-    # print("DEBUG - DETECTED DEALERS:", context.get("dealers_found"))
     dealer_list = context.get("dealers_found", [])
     dealer_candidates = []
 
     FEMSHOT = """
-Example:
+Example 1:
 Message:
 "Hi Véronique, Mazda Steele is still showing vehicles that were sold last week. Request to check the PBS import."
 
@@ -35,6 +33,22 @@ Zoho Fields:
   "sub_category": "Import",
   "syndicator": "PBS",
   "inventory_type": ""
+}
+
+Example 2:
+Message:
+"Hi, we’d like to activate a Car Media export for our new and used vehicles at Lallier Kia Laval."
+
+Zoho Fields:
+{
+  "contact": "",
+  "dealer_name": "Lallier Kia Laval",
+  "dealer_id": "",
+  "rep": "",
+  "category": "Product Activation – Existing Client",
+  "sub_category": "Export",
+  "syndicator": "Car Media",
+  "inventory_type": "New + Used"
 }
 """
 
@@ -50,8 +64,9 @@ Zoho Fields:
         "- The 'syndicator' field must refer to the export target (where D2C is sending the feed), not the data source or origin (e.g. Inventory+, PBS, SERTI)\n"
         "- If any field is uncertain or missing, leave it blank — logic will complete it\n"
         "- Do not infer — only return grounded field values\n"
-        "- Return a JSON object with ALL keys present and fill missing keys with empty string.\n"
-        "- Do NOT include any explanations or extra text outside the JSON.\n"
+        "- Return a JSON object with ALL keys present and fill missing keys with empty string\n"
+        "- Do not include markdown (e.g. ```json) or explanation. Return only raw JSON\n"
+        "- Do not invent or guess Dealer ID — use mapping or leave blank\n"
         + FEMSHOT +
         "\nNow classify the following message and return ONLY the JSON object as exactly specified:"
     )
@@ -77,7 +92,14 @@ Return a JSON object exactly as follows, with ALL keys present (use empty string
 }}
 """
 
-    # --- LLM call + error handling ---
+    # Optional inline hints for edge cases
+    if context.get("image_flags"):
+        USER_PROMPT = "[Contains image/photo keywords]\n" + USER_PROMPT
+    if context.get("contains_stock_number"):
+        USER_PROMPT = "[Contains stock number]\n" + USER_PROMPT
+    if dealer_list:
+        SYSTEM_PROMPT = f"Detected dealer candidates: {', '.join(dealer_list)}\n\n" + SYSTEM_PROMPT
+
     try:
         resp = client.chat.completions.create(
             model=model,
@@ -92,7 +114,6 @@ Return a JSON object exactly as follows, with ALL keys present (use empty string
         print("❌ LLM call failed:", repr(e))
         return {"error": str(e)}
 
-    # --- Parse JSON output from LLM ---
     raw = re.sub(r"^```(?:json)?\s*\{", "{", raw)
     raw = re.sub(r"\s*```$", "", raw)
     m = re.search(r"\{.*\}", raw, re.DOTALL)
@@ -102,7 +123,7 @@ Return a JSON object exactly as follows, with ALL keys present (use empty string
     data = json.loads(json_text)
     zf = data.get("zoho_fields", {})
 
-    # --- Always build list of all possible dealer name candidates ---
+    # All dealer matching logic unchanged
     dn_llm = zf.get("dealer_name", "").strip()
     if dn_llm:
         dealer_candidates.append(dn_llm)
@@ -114,7 +135,6 @@ Return a JSON object exactly as follows, with ALL keys present (use empty string
     if fallback and fallback not in dealer_candidates:
         dealer_candidates.append(fallback)
 
-    # --- Try mapping each candidate until success ---
     matched_name = ""
     matched_id = ""
     matched_rep = ""
@@ -126,7 +146,6 @@ Return a JSON object exactly as follows, with ALL keys present (use empty string
             matched_rep = dealer_to_rep.get(norm, "")
             break
 
-    # --- Fallback to lookup_dealer_by_name if no direct match ---
     if not matched_id and dealer_candidates:
         for name in dealer_candidates:
             override = lookup_dealer_by_name(name)
@@ -136,7 +155,6 @@ Return a JSON object exactly as follows, with ALL keys present (use empty string
                 matched_rep = override["rep"]
                 break
 
-    # --- Update output with mapping, only if we find a valid match ---
     if matched_id:
         zf["dealer_name"] = matched_name.title()
         zf["dealer_id"] = matched_id
@@ -146,7 +164,6 @@ Return a JSON object exactly as follows, with ALL keys present (use empty string
         zf["dealer_name"] = dn_llm.title() if dn_llm else ""
         zf["contact"] = zf.get("rep", "")
 
-    # Ensure all keys exist as strings
     expected_keys = [
         "contact", "dealer_name", "dealer_id", "rep",
         "category", "sub_category", "syndicator", "inventory_type"
@@ -163,6 +180,7 @@ Return a JSON object exactly as follows, with ALL keys present (use empty string
     data.pop("suggested_reply", None)
 
     return data
+
 
 def find_example_dealer(text: str):
     patterns = [

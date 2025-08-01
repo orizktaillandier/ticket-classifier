@@ -92,3 +92,16 @@ def batch_preprocess_csv(path="classifier_input_examples.csv"):
         context["source"] = row.source
         results.append(context)
     return results
+
+def lookup_dealer_by_name(name, csv_path="rep_dealer_mapping.csv"):
+    name = name.lower().strip()
+    df = pd.read_csv(csv_path)
+    df["Dealer Name"] = df["Dealer Name"].str.lower().str.strip()
+
+    match = df[df["Dealer Name"] == name]
+    if not match.empty:
+        return {
+            "dealer_id": match.iloc[0]["Dealer ID"],
+            "rep": match.iloc[0]["Rep Name"]
+        }
+    return {}

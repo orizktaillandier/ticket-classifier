@@ -37,8 +37,8 @@ if st.button("Classify Ticket"):
         st.subheader("📝 Zoho Comment")
         st.code(result.get("zoho_comment", ""), language="markdown")
 
-        st.subheader("✉️ Suggested Reply")
-        st.code(result.get("suggested_reply", ""), language="markdown")
+        #st.subheader("✉️ Suggested Reply")
+        #st.code(result.get("suggested_reply", ""), language="markdown")
 
         edge_case = result.get("edge_case", "")
         if edge_case:

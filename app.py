@@ -4,6 +4,14 @@ import json
 
 st.set_page_config(page_title="Ticket AI Classifier", layout="wide")
 
+# Hide Streamlit footer and menu
+st.markdown("""
+    <style>
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    </style>
+""", unsafe_allow_html=True)
+
 st.title("🎟️ Ticket AI Classifier")
 st.markdown("""
 This tool classifies Zoho Desk tickets using your custom LLM pipeline.
@@ -12,31 +20,28 @@ This tool classifies Zoho Desk tickets using your custom LLM pipeline.
 - Dealer ID, rep, syndicator, and comment logic are dynamic.
 """)
 
-with st.expander("ℹ️ How to Use"):
-    st.markdown("""
-    - Paste the full email body, including headers or signature if available.
-    - The system will automatically extract Dealer Name, Contact, Syndicator, and more.
-    - Output will follow the Zoho classification format and include the comment + reply.
-    """)
+with st.sidebar:
+    st.header("📝 Ticket Input")
+    ticket_input = st.text_area("Paste full email or ticket content here:", height=250)
+    classify = st.button("Classify Ticket")
 
-ticket_input = st.text_area("Paste full email or ticket content here:", height=250)
+col1, col2 = st.columns((1, 2))
 
-if st.button("Classify Ticket"):
+if classify:
     if not ticket_input.strip():
-        st.error("Please paste a ticket or message.")
+        col1.error("Please paste a ticket or message.")
     else:
-        try:
-            result = classify_ticket(ticket_input.strip())
-            st.success("✅ Classification complete.")
-            st.subheader("📋 Zoho Fields")
-            st.json(result["zoho_fields"])
+        with st.spinner("Classifying…"):
+            try:
+                result = classify_ticket(ticket_input.strip())
+                col1.success("✅ Classification complete.")
 
-            st.subheader("📝 Zoho Comment")
-            st.code(result["zoho_comment"], language="markdown")
+                col2.subheader("📋 Zoho Fields")
+                col2.json(result["zoho_fields"])
 
-            #st.subheader("✉️ Suggested Reply")
-            #st.code(result["suggested_reply"], language="markdown")
+                col2.subheader("📝 Zoho Comment")
+                col2.code(result["zoho_comment"], language="markdown")
 
-        except Exception as e:
-            st.error("❌ An unexpected error occurred.")
-            st.exception(e)
+            except Exception as e:
+                col1.error("❌ An unexpected error occurred.")
+                col1.exception(e)

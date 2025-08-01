@@ -45,12 +45,10 @@ def normalize_dealer_name(raw_name):
     return " ".join(sorted(re.sub(r"[^a-z0-9\s]", "", str(raw_name).lower()).split()))
 
 def robust_dealer_match(candidate_names):
-    # Try sorted word set match first
     for name in candidate_names:
         norm = normalize_dealer_name(name)
         if norm in dealer_lookup:
             return dealer_lookup[norm]
-    # Fallback: fuzzywuzzy token_set_ratio if > 90
     for name in candidate_names:
         norm = normalize_dealer_name(name)
         best_match = process.extractOne(norm, DEALER_KEYS, scorer=fuzz.token_set_ratio)
@@ -154,9 +152,11 @@ Return a JSON object:
     match = re.search(r'{.*}', content, re.DOTALL)
     if not match:
         raise ValueError(f"❌ No JSON block found in response:\n{content}")
-        result = json.loads(match.group(0))
 
-    # Patch: format Zoho Comment using structured fields
+    # ✅ Fixed position — now always parsed
+    result = json.loads(match.group(0))
+
+    # ✅ Format Zoho Comment with structured content
     zf = result.get("zoho_fields", {})
     comment_parts = []
     if zf.get("dealer_name"):
@@ -177,7 +177,6 @@ def classify_ticket(ticket_message):
     fields = {}
 
     dealer_name, rep, dealer_id = extract_best_dealer(context, ticket_message)
-    # Only use rep map; never fallback to sender or LLM for these fields
     if dealer_id and rep and dealer_name:
         fields["dealer_name"] = dealer_name
         fields["dealer_id"] = dealer_id
@@ -199,12 +198,10 @@ def classify_ticket(ticket_message):
     needs_llm = not fields["category"] or not fields["sub_category"]
     if needs_llm:
         result = classify_ticket_llm(ticket_message, context=fields)
-        # For matched dealer, always overwrite with CSV rep fields
         if dealer_id and rep and dealer_name:
             for key in ["dealer_name", "dealer_id", "rep", "contact"]:
                 result["zoho_fields"][key] = fields[key]
         else:
-            # No mapping: set to blank (never LLM guess)
             for key in ["dealer_name", "dealer_id", "rep", "contact"]:
                 result["zoho_fields"][key] = ""
         for k in ["syndicator", "inventory_type"]:

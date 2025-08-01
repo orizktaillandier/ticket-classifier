@@ -1,5 +1,5 @@
 import streamlit as st
-from llm_classifier import classify_ticket
+from llm_classifier import classify_ticket_llm
 
 st.set_page_config(page_title="Ticket AI Classifier", layout="wide")
 st.title("🧠 Ticket AI Classifier")

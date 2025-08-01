@@ -82,6 +82,8 @@ Return a JSON object exactly as follows:
         ],
         temperature=0.2,
     )
+    print("RAW LLM OUTPUT:", raw)
+    print("PARSED JSON:", data)
     raw = resp.choices[0].message.content.strip()
     raw = re.sub(r"^```(?:json)?\s*\{", "{", raw)
     raw = re.sub(r"\s*```$", "", raw)

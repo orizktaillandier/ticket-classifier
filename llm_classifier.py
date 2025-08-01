@@ -92,29 +92,37 @@ Return a JSON object exactly as follows:
     data = json.loads(json_text)
     zf = data.get("zoho_fields", {})
 
-    # Normalize and override dealer
+    # --- Dealer name normalization & mapping ---
+    # 1. Normalize the LLM output dealer_name (if present)
     dn_raw = zf.get("dealer_name", "")
     dn = re.sub(r"([a-z])([A-Z])", r"\1 \2", dn_raw).lower().strip()
     mapped_id = dealer_to_id.get(dn, "")
+    mapped_rep = dealer_to_rep.get(dn, "")
 
-    if not mapped_id and example and override.get("dealer_id") and "group" not in example.lower():
-        zf["dealer_name"] = example
-        zf["dealer_id"] = override["dealer_id"]
-        zf["rep"] = override["rep"]
+    # 2. If not found, try example/fallback
+    if not mapped_id and example:
+        fallback_override = lookup_dealer_by_name(example)
+        if fallback_override:
+            zf["dealer_name"] = example.title()
+            zf["dealer_id"] = fallback_override["dealer_id"]
+            zf["rep"] = fallback_override["rep"]
     else:
+        # 3. If mapped, override the LLM output with repmap values
         if mapped_id:
             zf["dealer_id"] = mapped_id
-            zf["rep"] = dealer_to_rep.get(dn, "")
+        if mapped_rep:
+            zf["rep"] = mapped_rep
 
+    # 4. If not found at all, leave blank (never guess)
+    # 5. Use first detected rep as contact unless direct from client (not handled here)
+    zf["dealer_name"] = zf.get("dealer_name", "").title()
+    zf["contact"] = zf.get("rep", "")
+
+    # 6. Syndicator: If not found but detected by logic, use that (never hardcode)
     if not zf.get("syndicator") and context.get("syndicators"):
         zf["syndicator"] = context["syndicators"][0].title()
 
-    zf["dealer_name"] = zf.get("dealer_name", "").title()
-    zf["contact"] = zf["rep"]
-
-    if zf.get("syndicator", "").lower() == "omni" and not zf.get("inventory_type"):
-        zf["inventory_type"] = "Used + New"
-
+    # 7. Compose the comment, edge case
     data["zoho_comment"] = format_zoho_comment(zf, context)
     data["edge_case"] = detect_edge_case(text, zf)
     data.pop("suggested_reply", None)

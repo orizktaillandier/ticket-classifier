@@ -77,6 +77,9 @@ Return a JSON object exactly as follows, with ALL keys present (use empty string
 }}
 """
 
+context = preprocess_ticket(text)
+print("DETECTED DEALERS:", context.get("dealers_found"))
+
     # --- LLM call + error handling ---
     try:
         resp = client.chat.completions.create(
@@ -117,6 +120,8 @@ Return a JSON object exactly as follows, with ALL keys present (use empty string
     fallback = find_example_dealer(text)
     if fallback and fallback not in dealer_candidates:
         dealer_candidates.append(fallback)
+    
+    print("DEALER CANDIDATES:", dealer_candidates)
 
     # --- Try mapping each candidate until success ---
     matched_name = ""
@@ -124,6 +129,9 @@ Return a JSON object exactly as follows, with ALL keys present (use empty string
     matched_rep = ""
     for name in dealer_candidates:
         norm = re.sub(r"([a-z])([A-Z])", r"\1 \2", name).lower().strip()
+        print(f"TRYING: '{name}' normalized as '{norm}'")
+        print("MAPPED ID:", dealer_to_id.get(norm))
+        print("MAPPED REP:", dealer_to_rep.get(norm))
         if norm in dealer_to_id:
             matched_name = name
             matched_id = dealer_to_id[norm]

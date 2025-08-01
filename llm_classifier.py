@@ -100,6 +100,14 @@ Return a JSON object exactly as follows:
     "inventory_type": "..."
   }},
   "zoho_comment": "...",
+    (Format the Zoho comment using plain line breaks. Start with:
+    - Dealer name and ID on line 1
+    - Rep on line 2
+    - Dealer contact email on line 3 (if available)
+    - Export line with syndicator and inventory type on line 4
+    - Then describe the issue using 2–4 short lines, each on its own line.
+    End with: 'Will review export data and source logic.')
+
   "suggested_reply": "..."
 }}
 """

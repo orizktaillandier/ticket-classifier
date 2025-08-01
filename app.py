@@ -7,9 +7,8 @@ st.title("🧠 Ticket AI Classifier")
 
 st.markdown(
     """
-    This tool classifies Zoho Desk tickets using your custom LLM pipeline.
+    This tool classifies Zoho Desk tickets.
     - Paste an email/ticket below to extract Zoho fields and generate the Zoho comment.
-    - No fields are hardcoded – dealer/rep/ID logic is dynamic from your mapping file.
     """
 )
 
@@ -17,7 +16,6 @@ with st.expander("ℹ️ Instructions"):
     st.write("""
     - Paste the full body of a ticket or email in the box below.
     - The model will extract fields, suggest a Zoho comment, and flag any edge cases.
-    - All logic is dynamic; your uploaded `rep_dealer_mapping.csv` powers the matching.
     """)
 
 ticket_input = st.text_area("Paste ticket or email here:", height=300)

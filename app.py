@@ -1,3 +1,4 @@
+import os
 import streamlit as st
 from llm_classifier import classify_ticket
 import json
@@ -116,3 +117,20 @@ if classify:
             except Exception as e:
                 st.error("❌ An unexpected error occurred.")
                 st.exception(e)
+
+st.markdown("---")
+
+# Show and allow download of feedback log if it exists
+log_path = "classification_feedback_log.jsonl"
+if os.path.exists(log_path):
+    with open(log_path, "r", encoding="utf-8") as f:
+        log_data = f.read()
+    st.subheader("🗃️ Download All Feedback Log")
+    st.download_button(
+        label="Download classification_feedback_log.jsonl",
+        data=log_data,
+        file_name="classification_feedback_log.jsonl",
+        mime="text/plain"
+    )
+else:
+    st.info("No feedback log available yet. Click the feedback button after testing a classification to create one.")

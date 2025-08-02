@@ -48,12 +48,11 @@ with st.sidebar:
     if "ticket_input" not in st.session_state:
         st.session_state.ticket_input = ""
 
-    st.session_state.ticket_input = st.text_area(
+    ticket_input = st.text_area(
         "Ticket or Email Content",
         value=st.session_state.ticket_input,
         placeholder="Paste the full ticket or email body here...",
         height=260,
-        key="ticket_input"
     )
 
     col1, col2 = st.columns(2)
@@ -63,6 +62,10 @@ with st.sidebar:
         if st.button("🧹 Clear Fields"):
             st.session_state.ticket_input = ""
             st.experimental_rerun()
+
+    # Store text after editing
+    st.session_state.ticket_input = ticket_input
+
 
 # Classification Section
 if classify:

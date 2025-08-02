@@ -62,7 +62,7 @@ with st.sidebar:
         if st.button("🧹 Clear Fields", use_container_width=True):
             st.session_state.ticket_input = ""
             st.experimental_rerun()
-
+"""
     # # Export Toggle Section
     # # st.markdown("---")
     # # st.subheader("⚙️ Export Toggle Tools")
@@ -90,7 +90,7 @@ with st.sidebar:
                 #else:
                    # st.error(f"❌ {inv_type} script failed.")
                 #st.code(result.stdout + "\n" + result.stderr)
-
+"""
 # MAIN: Classifier Output
 if classify:
     st.session_state.ticket_input = ticket_input

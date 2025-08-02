@@ -1,5 +1,6 @@
 [server]
 headless = true
+enableWatchdog = false
 
 [browser]
 gatherUsageStats = false

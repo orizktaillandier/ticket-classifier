@@ -41,18 +41,32 @@ This tool classifies Zoho Desk tickets using your custom LLM pipeline.
 - Dealer ID, rep, syndicator, and comment logic are dynamically detected.
 """)
 
-# Sidebar Input (better prompt, bigger height, polished style)
+# Sidebar Input
 with st.sidebar:
     st.header("📝 Ticket Input")
-    ticket_input = st.text_area(
+
+    if "ticket_input" not in st.session_state:
+        st.session_state.ticket_input = ""
+
+    st.session_state.ticket_input = st.text_area(
         "Ticket or Email Content",
+        value=st.session_state.ticket_input,
         placeholder="Paste the full ticket or email body here...",
-        height=260
+        height=260,
+        key="ticket_input"
     )
-    classify = st.button("🚀 Classify Ticket")
+
+    col1, col2 = st.columns(2)
+    with col1:
+        classify = st.button("🚀 Classify Ticket")
+    with col2:
+        if st.button("🧹 Clear Fields"):
+            st.session_state.ticket_input = ""
+            st.experimental_rerun()
 
 # Classification Section
 if classify:
+    ticket_input = st.session_state.ticket_input
     if not ticket_input.strip():
         st.error("Please paste a ticket or message.")
     else:
@@ -80,7 +94,6 @@ if classify:
 **Inventory Type**: `{zf.get("inventory_type", "")}`
 """)
 
-                    # Feedback flag button (full width under fields)
                     feedback = st.button("❌ This classification is incorrect", key="flag_button_left_col")
                     if feedback:
                         log_entry = {
@@ -110,7 +123,6 @@ if classify:
                     st.markdown("---")
                     st.markdown("### 📬 Communication Timeline")
 
-                    # Parse sender lines for summary
                     timeline = []
                     lines = raw_text.splitlines()
                     for i, line in enumerate(lines):

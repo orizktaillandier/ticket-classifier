@@ -6,12 +6,6 @@ import json
 
 st.set_page_config(page_title="Ticket AI Classifier", layout="wide")
 
-# Initialize session state
-if "ticket_input" not in st.session_state:
-    st.session_state.ticket_input = ""
-if "classification_result" not in st.session_state:
-    st.session_state.classification_result = {}
-
 # Custom CSS for better textarea and button
 st.markdown("""
     <style>
@@ -38,7 +32,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-st.title("Ticket AI Classifier")
+st.title("🎟️ Ticket AI Classifier")
 
 st.markdown("""
 This tool classifies Zoho Desk tickets using your custom LLM pipeline.
@@ -47,52 +41,35 @@ This tool classifies Zoho Desk tickets using your custom LLM pipeline.
 - Dealer ID, rep, syndicator, and comment logic are dynamically detected.
 """)
 
-# Sidebar Input
+# Sidebar Input (better prompt, bigger height, polished style)
 with st.sidebar:
-    st.header("\ud83d\udcdc Ticket Input")
-    st.session_state.ticket_input = st.text_area(
+    st.header("📝 Ticket Input")
+    ticket_input = st.text_area(
         "Ticket or Email Content",
-        value=st.session_state.ticket_input,
-        key="ticket_input",
         placeholder="Paste the full ticket or email body here...",
         height=260
     )
-
-    col1, col2 = st.columns([1, 1])
-    with col1:
-        classify = st.button("\ud83d\ude80 Classify Ticket")
-    with col2:
-        if st.button("\ud83e\uddf9 Clear Fields"):
-            st.session_state.ticket_input = ""
-            st.session_state.classification_result = {}
-            st.experimental_rerun()
+    classify = st.button("🚀 Classify Ticket")
 
 # Classification Section
 if classify:
-    if not st.session_state.ticket_input.strip():
+    if not ticket_input.strip():
         st.error("Please paste a ticket or message.")
     else:
         with st.spinner("Classifying…"):
             try:
-                result = classify_ticket(st.session_state.ticket_input.strip())
-                st.success("\u2705 Classification complete.")
-                st.session_state.classification_result = result
-            except Exception as e:
-                st.error("\u274c An unexpected error occurred.")
-                st.exception(e)
+                result = classify_ticket(ticket_input.strip())
+                st.success("✅ Classification complete.")
+                zf = result.get("zoho_fields", {})
+                edge = result.get("edge_case", "")
+                raw_text = ticket_input.strip()
 
-# Render stored classification result
-if st.session_state.classification_result:
-    result = st.session_state.classification_result
-    zf = result.get("zoho_fields", {})
-    edge = result.get("edge_case", "")
-    raw_text = st.session_state.ticket_input.strip()
+                # Split layout: left (Zoho Fields + Timeline), right (Zoho Comment)
+                left_col, right_col = st.columns([2, 1])
 
-    left_col, right_col = st.columns([2, 1])
-
-    with left_col:
-        st.markdown("### \ud83d\udcdf Zoho Fields")
-        st.markdown(f"""
+                with left_col:
+                    st.markdown("### 🧾 Zoho Fields")
+                    st.markdown(f"""
 **Dealer Name**: `{zf.get("dealer_name", "")}`  
 **Dealer ID**: `{zf.get("dealer_id", "")}`  
 **Rep**: `{zf.get("rep", "")}`  
@@ -103,55 +80,62 @@ if st.session_state.classification_result:
 **Inventory Type**: `{zf.get("inventory_type", "")}`
 """)
 
-        feedback = st.button("\u274c This classification is incorrect", key="flag_button_left_col")
-        if feedback:
-            log_entry = {
-                "timestamp": datetime.utcnow().isoformat(),
-                "edge_case": edge,
-                "zoho_fields": json.dumps(zf),
-                "zoho_comment": result.get("zoho_comment", ""),
-                "input_text": st.session_state.ticket_input.strip()
-            }
-            form_url = "https://docs.google.com/forms/d/e/1FAIpQLSfIJgy3DdtSQsZN6G4asdZyiWaf2Qb-8_9fwQLxp74sFTMx4g/formResponse"
-            payload = {
-                "entry.2041497043": log_entry["timestamp"],
-                "entry.827201251": log_entry["edge_case"],
-                "entry.1216884505": log_entry["zoho_fields"],
-                "entry.1859746012": log_entry["zoho_comment"],
-                "entry.91556361": log_entry["input_text"]
-            }
-            r = requests.post(form_url, data=payload)
-            if r.status_code == 200:
-                st.success("\ud83d\udcdd Feedback sent to Google Sheets! Thank you!")
-            else:
-                st.info("Feedback submitted. Check Google Sheets to confirm receipt.")
+                    # Feedback flag button (full width under fields)
+                    feedback = st.button("❌ This classification is incorrect", key="flag_button_left_col")
+                    if feedback:
+                        log_entry = {
+                            "timestamp": datetime.utcnow().isoformat(),
+                            "edge_case": edge,
+                            "zoho_fields": json.dumps(zf),
+                            "zoho_comment": result.get("zoho_comment", ""),
+                            "input_text": ticket_input.strip()
+                        }
+                        form_url = "https://docs.google.com/forms/d/e/1FAIpQLSfIJgy3DdtSQsZN6G4asdZyiWaf2Qb-8_9fwQLxp74sFTMx4g/formResponse"
+                        payload = {
+                            "entry.2041497043": log_entry["timestamp"],
+                            "entry.827201251": log_entry["edge_case"],
+                            "entry.1216884505": log_entry["zoho_fields"],
+                            "entry.1859746012": log_entry["zoho_comment"],
+                            "entry.91556361": log_entry["input_text"]
+                        }
+                        r = requests.post(form_url, data=payload)
+                        if r.status_code == 200:
+                            st.success("📝 Feedback sent to Google Sheets! Thank you!")
+                        else:
+                            st.info("Feedback submitted. Check Google Sheets to confirm receipt.")
 
-        if edge:
-            st.warning(f"\u26a0\ufe0f Detected Edge Case: `{edge}`")
+                    if edge:
+                        st.warning(f"⚠️ Detected Edge Case: `{edge}`")
 
-        st.markdown("---")
-        st.markdown("### \ud83d\udce8 Communication Timeline")
-        timeline = []
-        lines = raw_text.splitlines()
-        for i, line in enumerate(lines):
-            line = line.strip()
-            if line.lower().startswith("from:") or "wrote:" in line.lower():
-                if i + 1 < len(lines):
-                    preview = lines[i + 1].strip()
-                    summary = f"- **{line}**\n  → _{preview[:100]}..._"
-                    timeline.append(summary)
-        if not timeline:
-            preview = raw_text[:150].replace("\n", " ")
-            timeline = [f"**Message:** _{preview}..._"]
+                    st.markdown("---")
+                    st.markdown("### 📬 Communication Timeline")
 
-        st.markdown("\n\n".join(timeline))
+                    # Parse sender lines for summary
+                    timeline = []
+                    lines = raw_text.splitlines()
+                    for i, line in enumerate(lines):
+                        line = line.strip()
+                        if line.lower().startswith("from:") or "wrote:" in line.lower():
+                            if i + 1 < len(lines):
+                                preview = lines[i + 1].strip()
+                                summary = f"- **{line}**\n  → _{preview[:100]}..._"
+                                timeline.append(summary)
+                    if not timeline:
+                        preview = raw_text[:150].replace("\n", " ")
+                        timeline = [f"**Message:** _{preview}..._"]
 
-    with right_col:
-        st.markdown("### \ud83d\udcdd Zoho Comment")
-        st.code(result["zoho_comment"], language="markdown")
-        st.download_button(
-            label="\ud83d\udccb Copy Zoho Comment",
-            data=result["zoho_comment"],
-            file_name="zoho_comment.txt",
-            mime="text/plain"
-        )
+                    st.markdown("\n\n".join(timeline))
+
+                with right_col:
+                    st.markdown("### 📝 Zoho Comment")
+                    st.code(result["zoho_comment"], language="markdown")
+                    st.download_button(
+                        label="📋 Copy Zoho Comment",
+                        data=result["zoho_comment"],
+                        file_name="zoho_comment.txt",
+                        mime="text/plain"
+                    )
+
+            except Exception as e:
+                st.error("❌ An unexpected error occurred.")
+                st.exception(e)

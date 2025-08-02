@@ -80,17 +80,13 @@ def extract_dealers(text):
 
 def extract_syndicators(text):
     text = text.lower()
-    matches = []
+    matches = set()
 
     for keyword, name in SYNDICATOR_KEYWORDS.items():
         if keyword in text and name.lower() in APPROVED_SYNDICATORS:
-            matches.append(name)
+            matches.add(name)
 
-    for name in APPROVED_SYNDICATORS:
-        if name in text:
-            matches.append(name.title())
-
-    return list(set(matches))
+    return list(matches)
 
 def extract_image_flags(text):
     flags = []

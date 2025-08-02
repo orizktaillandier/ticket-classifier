@@ -87,16 +87,37 @@ if classify:
 
                 with left_col:
                     st.markdown("### 🧾 Zoho Fields")
-                    st.markdown(f"""
-**Dealer Name**: `{zf.get("dealer_name", "")}`  
-**Dealer ID**: `{zf.get("dealer_id", "")}`  
-**Rep**: `{zf.get("rep", "")}`  
-**Contact**: `{zf.get("contact", "")}`  
-**Category**: `{zf.get("category", "")}`  
-**Sub Category**: `{zf.get("sub_category", "")}`  
-**Syndicator**: `{zf.get("syndicator", "")}`  
-**Inventory Type**: `{zf.get("inventory_type", "")}`
-""")
+                
+                    # Card-style container using Markdown + CSS
+                    st.markdown("""
+                    <div style='
+                        background-color: #1e1e1e;
+                        padding: 1.2em 1.5em;
+                        border-radius: 12px;
+                        border: 1px solid #444;
+                        margin-bottom: 1em;
+                        font-family: monospace;
+                        font-size: 0.95em;
+                    '>
+                    <p><strong style='color:#ccc;'>Dealer Name:</strong> <code>{dealer_name}</code></p>
+                    <p><strong style='color:#ccc;'>Dealer ID:</strong> <code>{dealer_id}</code></p>
+                    <p><strong style='color:#ccc;'>Rep:</strong> <code>{rep}</code></p>
+                    <p><strong style='color:#ccc;'>Contact:</strong> <code>{contact}</code></p>
+                    <p><strong style='color:#ccc;'>Category:</strong> <code>{category}</code></p>
+                    <p><strong style='color:#ccc;'>Sub Category:</strong> <code>{sub_category}</code></p>
+                    <p><strong style='color:#ccc;'>Syndicator:</strong> <code>{syndicator}</code></p>
+                    <p><strong style='color:#ccc;'>Inventory Type:</strong> <code>{inventory_type}</code></p>
+                    </div>
+                    """.format(
+                        dealer_name=zf.get("dealer_name", ""),
+                        dealer_id=zf.get("dealer_id", ""),
+                        rep=zf.get("rep", ""),
+                        contact=zf.get("contact", ""),
+                        category=zf.get("category", ""),
+                        sub_category=zf.get("sub_category", ""),
+                        syndicator=zf.get("syndicator", ""),
+                        inventory_type=zf.get("inventory_type", ""),
+                    ), unsafe_allow_html=True)
 
                     feedback = st.button("❌ This classification is incorrect", key="flag_button_left_col")
                     if feedback:

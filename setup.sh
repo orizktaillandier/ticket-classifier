@@ -1,2 +1,2 @@
 #!/bin/bash
-playwright install
+playwright install --with-deps

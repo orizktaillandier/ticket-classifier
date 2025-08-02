@@ -91,7 +91,6 @@ if classify:
                     # Card-style container using Markdown + CSS
                     st.markdown("""
                     <div style='
-                        background-color: #1e1e1e;
                         padding: 1.2em 1.5em;
                         border-radius: 12px;
                         border: 1px solid #444;

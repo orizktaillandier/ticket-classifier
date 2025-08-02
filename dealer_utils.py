@@ -132,7 +132,7 @@ def detect_edge_case(message: str, zoho_fields=None):
     synd = (zoho_fields or {}).get("syndicator", "").lower()
     if ("trader" in text or synd == "trader") and "used" in text and "new" in text:
         return "E55"
-    if re.search(r"(stock number|stock#).*?[<>'\\"]", text):
+    if re.search(r'(stock number|stock#).*?[<>\'\"\\]', text):
         return "E44"
     if "firewall" in text:
         return "E74"

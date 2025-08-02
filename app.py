@@ -155,7 +155,3 @@ if st.session_state.classification_result:
             file_name="zoho_comment.txt",
             mime="text/plain"
         )
-
-            except Exception as e:
-                st.error("❌ An unexpected error occurred.")
-                st.exception(e)

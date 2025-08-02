@@ -14,7 +14,6 @@ try:
     dealer_to_rep = mapping_df.set_index("Dealer Name")["Rep Name"].to_dict()
     dealer_to_id  = mapping_df.set_index("Dealer Name")["Dealer ID"].to_dict()
 except Exception as e:
-    # Log and crash clearly
     raise RuntimeError(f"❌ FATAL: Could not load 'rep_dealer_mapping.csv'. Reason: {e}")
 
 def classify_ticket(text: str, model="gpt-4o"):
@@ -127,7 +126,7 @@ Return a JSON object exactly as follows, with ALL keys present (use empty string
     data = json.loads(json_text)
     zf = data.get("zoho_fields", {})
 
-    # All dealer matching logic unchanged
+    # Dealer matching logic
     dn_llm = zf.get("dealer_name", "").strip()
     if dn_llm:
         dealer_candidates.append(dn_llm)
@@ -165,15 +164,16 @@ Return a JSON object exactly as follows, with ALL keys present (use empty string
         zf["rep"] = matched_rep
         zf["contact"] = matched_rep
     else:
-        # === Group fallback logic: if no rooftop match, check for group in mapping ===
+        # === Group fallback logic: matches any 'group' or 'ffun' in name ===
         group_found = False
         for name, id_ in dealer_to_id.items():
             lname = name.strip().lower()
             if "group" in lname or "ffun" in lname:
                 zf["dealer_name"] = name.title() + " (Group suggestion)"
                 zf["dealer_id"] = id_
-                zf["rep"] = ""
-                zf["contact"] = ""
+                # Use mapping rep, or fall back to email's sender/contact
+                zf["rep"] = dealer_to_rep.get(name, "") or context.get("rep", "") or context.get("contact", "")
+                zf["contact"] = zf["rep"]
                 group_found = True
                 break
         if not group_found:

@@ -8,10 +8,14 @@ from datetime import datetime
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-mapping_df = pd.read_csv("rep_dealer_mapping.csv")
-mapping_df["Dealer Name"] = mapping_df["Dealer Name"].astype(str).str.lower().str.strip()
-dealer_to_rep = mapping_df.set_index("Dealer Name")["Rep Name"].to_dict()
-dealer_to_id  = mapping_df.set_index("Dealer Name")["Dealer ID"].to_dict()
+try:
+    mapping_df = pd.read_csv("rep_dealer_mapping.csv")
+    mapping_df["Dealer Name"] = mapping_df["Dealer Name"].astype(str).str.lower().str.strip()
+    dealer_to_rep = mapping_df.set_index("Dealer Name")["Rep Name"].to_dict()
+    dealer_to_id  = mapping_df.set_index("Dealer Name")["Dealer ID"].to_dict()
+except Exception as e:
+    # Log and crash clearly
+    raise RuntimeError(f"❌ FATAL: Could not load 'rep_dealer_mapping.csv'. Reason: {e}")
 
 def classify_ticket(text: str, model="gpt-4o"):
     context = preprocess_ticket(text)
@@ -181,12 +185,11 @@ Return a JSON object exactly as follows, with ALL keys present (use empty string
 
     return data
 
-
 def find_example_dealer(text: str):
     patterns = [
-        r"for ([A-Za-z0-9 &\-\']+)\b",
-        r"from ([A-Za-z0-9 &\-\']+)\b",
-        r"regarding ([A-Za-z0-9 &\-\']+)\b"
+        r"for ([A-Za-z0-9 &\\-\\']+)\\b",
+        r"from ([A-Za-z0-9 &\\-\\']+)\\b",
+        r"regarding ([A-Za-z0-9 &\\-\\']+)\\b"
     ]
     for pat in patterns:
         m = re.search(pat, text, flags=re.IGNORECASE)

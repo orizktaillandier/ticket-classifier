@@ -1,4 +1,6 @@
 import os
+import requests
+from datetime import datetime
 import streamlit as st
 from llm_classifier import classify_ticket
 import json
@@ -99,15 +101,30 @@ if classify:
                         mime="text/plain"
                     )
                 # Add feedback button
-                if st.button("❌ This classification is incorrect"):
-                    from datetime import datetime
-                    log_entry = {
-                        "timestamp": datetime.utcnow().isoformat(),
-                        "input_text": ticket_input.strip(),
-                        "zoho_fields": zf,
-                        "zoho_comment": result.get("zoho_comment", ""),
-                        "edge_case": edge
-                    }
+                # Add feedback button
+                    if st.button("❌ This classification is incorrect"):
+                        log_entry = {
+                            "timestamp": datetime.utcnow().isoformat(),
+                            "edge_case": edge,
+                            "zoho_fields": json.dumps(zf),
+                            "zoho_comment": result.get("zoho_comment", ""),
+                            "input_text": ticket_input.strip()
+                        }
+                        form_url = "https://docs.google.com/forms/d/e/1FAIpQLSfIJgy3DdtSQsZN6G4asdZyiWaf2Qb-8_9fwQLxp74sFTMx4g/formResponse"
+                        payload = {
+                            "entry.2041497043": log_entry["timestamp"],
+                            "entry.827201251": log_entry["edge_case"],
+                            "entry.1216884505": log_entry["zoho_fields"],
+                            "entry.1859746012": log_entry["zoho_comment"],
+                            "entry.91556361": log_entry["input_text"]
+                        }
+                        r = requests.post(form_url, data=payload)
+                        if r.status_code == 200:
+                            st.success("📝 Feedback sent to Google Sheets! Thank you!")
+                        else:
+                            # Google Forms usually returns 200 or 302 even on partial failures
+                            st.info("Feedback submitted. Check Google Sheets to confirm receipt.")
+
                     with open("classification_feedback_log.jsonl", "a", encoding="utf-8") as log_file:
                         import json
                         log_file.write(json.dumps(log_entry, ensure_ascii=False) + "\n")

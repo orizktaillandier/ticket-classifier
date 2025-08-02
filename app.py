@@ -1,4 +1,3 @@
-
 import streamlit as st
 from llm_classifier import classify_ticket
 import json
@@ -49,23 +48,48 @@ if classify:
                 st.success("✅ Classification complete.")
                 zf = result.get("zoho_fields", {})
                 edge = result.get("edge_case", "")
-                st.subheader("🧾 Ticket Summary")
-                st.markdown(f"""
-                **Dealer Name**: {zf.get("dealer_name", "")}  
-                **Dealer ID**: {zf.get("dealer_id", "")}  
-                **Rep**: {zf.get("rep", "")}  
-                **Category**: {zf.get("category", "")}  
-                **Syndicator**: {zf.get("syndicator", "")}
-                """)
+                raw_text = ticket_input.strip()
 
-                if edge:
-                    st.warning(f"⚠️ Detected Edge Case: `{edge}`")
+                # Split layout: left (Zoho Fields + Timeline), right (Zoho Comment)
+                left_col, right_col = st.columns([2, 1])
 
-                # Keep existing expanders
-                with st.expander("📋 Zoho Fields", expanded=False):
-                    st.json(zf)
+                with left_col:
+                    st.markdown("### 🧾 Zoho Fields")
+                    st.markdown(f"""
+**Dealer Name**: `{zf.get("dealer_name", "")}`  
+**Dealer ID**: `{zf.get("dealer_id", "")}`  
+**Rep**: `{zf.get("rep", "")}`  
+**Contact**: `{zf.get("contact", "")}`  
+**Category**: `{zf.get("category", "")}`  
+**Sub Category**: `{zf.get("sub_category", "")}`  
+**Syndicator**: `{zf.get("syndicator", "")}`  
+**Inventory Type**: `{zf.get("inventory_type", "")}`
+""")
 
-                with st.expander("📝 Zoho Comment", expanded=True):
+                    if edge:
+                        st.warning(f"⚠️ Detected Edge Case: `{edge}`")
+
+                    st.markdown("---")
+                    st.markdown("### 📬 Communication Timeline")
+
+                    # Parse sender lines for summary
+                    timeline = []
+                    lines = raw_text.splitlines()
+                    for i, line in enumerate(lines):
+                        line = line.strip()
+                        if line.lower().startswith("from:") or "wrote:" in line.lower():
+                            if i + 1 < len(lines):
+                                preview = lines[i + 1].strip()
+                                summary = f"- **{line}**\n  → _{preview[:100]}..._"
+                                timeline.append(summary)
+                    if not timeline:
+                        preview = raw_text[:150].replace("\n", " ")
+                        timeline = [f"**Message:** _{preview}..._"]
+
+                    st.markdown("\n\n".join(timeline))
+
+                with right_col:
+                    st.markdown("### 📝 Zoho Comment")
                     st.code(result["zoho_comment"], language="markdown")
                     st.download_button(
                         label="📋 Copy Zoho Comment",
@@ -73,7 +97,6 @@ if classify:
                         file_name="zoho_comment.txt",
                         mime="text/plain"
                     )
-
 
             except Exception as e:
                 st.error("❌ An unexpected error occurred.")

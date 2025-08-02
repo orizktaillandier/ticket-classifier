@@ -61,11 +61,11 @@ with st.sidebar:
     with col2:
         if st.button("🧹 Clear Fields"):
             st.session_state.ticket_input = ""
-            st.experimental_rerun()
+            ticket_input = ""
+            classify = False
 
-    # Store text after editing
+    # Always keep in sync
     st.session_state.ticket_input = ticket_input
-
 
 # Classification Section
 if classify:

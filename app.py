@@ -91,10 +91,6 @@ with st.sidebar:
                     st.error(f"❌ {inv_type} script failed.")
                 st.code(result.stdout + "\n" + result.stderr)
 
-            except Exception as e:
-                st.error("⚠️ An error occurred while executing the script.")
-                st.exception(e)
-
 # MAIN: Classifier Output
 if classify:
     st.session_state.ticket_input = ticket_input

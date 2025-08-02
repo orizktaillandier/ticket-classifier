@@ -164,14 +164,17 @@ Return a JSON object exactly as follows, with ALL keys present (use empty string
         zf["rep"] = matched_rep
         zf["contact"] = matched_rep
     else:
-        # === Group fallback logic: matches any 'group' or 'ffun' in name ===
+        # Group fallback logic: match any mapping row with "group" in name or mapping row that is the only match found
         group_found = False
         for name, id_ in dealer_to_id.items():
             lname = name.strip().lower()
-            if "group" in lname or "ffun" in lname:
+            if "group" in lname or (
+                # If the mapping row's dealer name is found exactly in the email
+                lname in text.lower()
+            ):
                 zf["dealer_name"] = name.title() + " (Group suggestion)"
                 zf["dealer_id"] = id_
-                # Use mapping rep, or fall back to email's sender/contact
+                # Use mapping rep, or fall back to sender/contact
                 zf["rep"] = dealer_to_rep.get(name, "") or context.get("rep", "") or context.get("contact", "")
                 zf["contact"] = zf["rep"]
                 group_found = True
@@ -179,6 +182,7 @@ Return a JSON object exactly as follows, with ALL keys present (use empty string
         if not group_found:
             zf["dealer_name"] = dn_llm.title() if dn_llm else ""
             zf["contact"] = zf.get("rep", "")
+
 
     expected_keys = [
         "contact", "dealer_name", "dealer_id", "rep",

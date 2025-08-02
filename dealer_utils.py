@@ -82,9 +82,15 @@ def extract_syndicators(text):
     text = text.lower()
     matches = set()
 
+    # Base rule: only map if keyword and approved name are valid
     for keyword, name in SYNDICATOR_KEYWORDS.items():
         if keyword in text and name.lower() in APPROVED_SYNDICATORS:
             matches.add(name)
+
+    # Special case: "Cox Automotive" maps to "HomeNet" if HomeNet is approved
+    if "cox automotive" in text or "homenet" in text or "coxauto" in text:
+        if "homenet" in APPROVED_SYNDICATORS:
+            matches.add("HomeNet")
 
     return list(matches)
 

@@ -6,7 +6,7 @@ import json
 
 st.set_page_config(page_title="Ticket AI Classifier", layout="wide")
 
-# Hide Streamlit footer and menu
+# Custom CSS for better textarea and button
 st.markdown("""
     <style>
     #MainMenu {visibility: hidden;}
@@ -14,12 +14,21 @@ st.markdown("""
     .stButton>button {
         background-color: #2E86AB;
         color: white;
-        border-radius: 6px;
-        padding: 0.5em 1em;
+        border-radius: 8px;
+        padding: 0.7em 1.4em;
+        font-size: 1.08em;
+        margin-top: 0.5em;
     }
     .stButton>button:hover {
         background-color: #1B4F72;
         color: white;
+    }
+    textarea {
+        font-size: 1.12em !important;
+        padding: 1.1em !important;
+        border-radius: 8px !important;
+        border: 1.2px solid #bfc9d1 !important;
+        background-color: #f8fbff !important;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -33,10 +42,14 @@ This tool classifies Zoho Desk tickets using your custom LLM pipeline.
 - Dealer ID, rep, syndicator, and comment logic are dynamically detected.
 """)
 
-# Sidebar Input
+# Sidebar Input (better prompt, bigger height, polished style)
 with st.sidebar:
     st.header("📝 Ticket Input")
-    ticket_input = st.text_area("Paste full email or ticket content here:", height=180)
+    ticket_input = st.text_area(
+        "Ticket or Email Content",
+        placeholder="Paste the full ticket or email body here...",
+        height=260
+    )
     classify = st.button("🚀 Classify Ticket")
 
 # Classification Section
@@ -67,6 +80,30 @@ if classify:
 **Syndicator**: `{zf.get("syndicator", "")}`  
 **Inventory Type**: `{zf.get("inventory_type", "")}`
 """)
+
+                    # Feedback flag button (full width under fields)
+                    feedback = st.button("❌ This classification is incorrect", key="flag_button_left_col")
+                    if feedback:
+                        log_entry = {
+                            "timestamp": datetime.utcnow().isoformat(),
+                            "edge_case": edge,
+                            "zoho_fields": json.dumps(zf),
+                            "zoho_comment": result.get("zoho_comment", ""),
+                            "input_text": ticket_input.strip()
+                        }
+                        form_url = "https://docs.google.com/forms/d/e/1FAIpQLSfIJgy3DdtSQsZN6G4asdZyiWaf2Qb-8_9fwQLxp74sFTMx4g/formResponse"
+                        payload = {
+                            "entry.2041497043": log_entry["timestamp"],
+                            "entry.827201251": log_entry["edge_case"],
+                            "entry.1216884505": log_entry["zoho_fields"],
+                            "entry.1859746012": log_entry["zoho_comment"],
+                            "entry.91556361": log_entry["input_text"]
+                        }
+                        r = requests.post(form_url, data=payload)
+                        if r.status_code == 200:
+                            st.success("📝 Feedback sent to Google Sheets! Thank you!")
+                        else:
+                            st.info("Feedback submitted. Check Google Sheets to confirm receipt.")
 
                     if edge:
                         st.warning(f"⚠️ Detected Edge Case: `{edge}`")
@@ -99,31 +136,7 @@ if classify:
                         file_name="zoho_comment.txt",
                         mime="text/plain"
                     )
-                    # Add feedback button (Google Forms only, no file logging)
-                    if st.button("❌ This classification is incorrect"):
-                        log_entry = {
-                            "timestamp": datetime.utcnow().isoformat(),
-                            "edge_case": edge,
-                            "zoho_fields": json.dumps(zf),
-                            "zoho_comment": result.get("zoho_comment", ""),
-                            "input_text": ticket_input.strip()
-                        }
-                        form_url = "https://docs.google.com/forms/d/e/1FAIpQLSfIJgy3DdtSQsZN6G4asdZyiWaf2Qb-8_9fwQLxp74sFTMx4g/formResponse"
-                        payload = {
-                            "entry.2041497043": log_entry["timestamp"],
-                            "entry.827201251": log_entry["edge_case"],
-                            "entry.1216884505": log_entry["zoho_fields"],
-                            "entry.1859746012": log_entry["zoho_comment"],
-                            "entry.91556361": log_entry["input_text"]
-                        }
-                        r = requests.post(form_url, data=payload)
-                        if r.status_code == 200:
-                            st.success("📝 Feedback sent to Google Sheets! Thank you!")
-                        else:
-                            st.info("Feedback submitted. Check Google Sheets to confirm receipt.")
 
             except Exception as e:
                 st.error("❌ An unexpected error occurred.")
                 st.exception(e)
-
-# No local log file or download code anymore — all feedback is now cloud-based!

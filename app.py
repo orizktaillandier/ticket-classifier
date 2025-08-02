@@ -1,4 +1,3 @@
-import os
 import requests
 from datetime import datetime
 import streamlit as st
@@ -100,8 +99,7 @@ if classify:
                         file_name="zoho_comment.txt",
                         mime="text/plain"
                     )
-                # Add feedback button
-                # Add feedback button
+                    # Add feedback button (Google Forms only, no file logging)
                     if st.button("❌ This classification is incorrect"):
                         log_entry = {
                             "timestamp": datetime.utcnow().isoformat(),
@@ -122,32 +120,10 @@ if classify:
                         if r.status_code == 200:
                             st.success("📝 Feedback sent to Google Sheets! Thank you!")
                         else:
-                            # Google Forms usually returns 200 or 302 even on partial failures
                             st.info("Feedback submitted. Check Google Sheets to confirm receipt.")
-
-                    with open("classification_feedback_log.jsonl", "a", encoding="utf-8") as log_file:
-                        import json
-                        log_file.write(json.dumps(log_entry, ensure_ascii=False) + "\n")
-                    st.info("📝 Logged for review. Thank you for your feedback!")
-
 
             except Exception as e:
                 st.error("❌ An unexpected error occurred.")
                 st.exception(e)
 
-st.markdown("---")
-
-# Show and allow download of feedback log if it exists
-log_path = "classification_feedback_log.jsonl"
-if os.path.exists(log_path):
-    with open(log_path, "r", encoding="utf-8") as f:
-        log_data = f.read()
-    st.subheader("🗃️ Download All Feedback Log")
-    st.download_button(
-        label="Download classification_feedback_log.jsonl",
-        data=log_data,
-        file_name="classification_feedback_log.jsonl",
-        mime="text/plain"
-    )
-else:
-    st.info("No feedback log available yet. Click the feedback button after testing a classification to create one.")
+# No local log file or download code anymore — all feedback is now cloud-based!

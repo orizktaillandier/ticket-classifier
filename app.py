@@ -1,4 +1,5 @@
 import requests
+import subprocess
 from datetime import datetime
 import streamlit as st
 from llm_classifier import classify_ticket
@@ -6,7 +7,7 @@ import json
 
 st.set_page_config(page_title="Ticket AI Classifier", layout="wide")
 
-# Custom CSS for better textarea and button
+# Custom CSS
 st.markdown("""
     <style>
     #MainMenu {visibility: hidden;}
@@ -41,10 +42,9 @@ This tool classifies Zoho Desk tickets using your custom LLM pipeline.
 - Dealer ID, rep, syndicator, and comment logic are dynamically detected.
 """)
 
-# Sidebar Input
+# SIDEBAR: Input + Export Toggle
 with st.sidebar:
     st.header("📝 Ticket Input")
-
     if "ticket_input" not in st.session_state:
         st.session_state.ticket_input = ""
 
@@ -52,25 +52,59 @@ with st.sidebar:
         "Ticket or Email Content",
         value=st.session_state.ticket_input,
         placeholder="Paste the full ticket or email body here...",
-        height=260,
+        height=260
     )
 
-     # Buttons: side-by-side and centered
     classify_col, clear_col = st.columns([1, 1])
     with classify_col:
         classify = st.button("🚀 Classify Ticket", use_container_width=True)
     with clear_col:
         if st.button("🧹 Clear Fields", use_container_width=True):
             st.session_state.ticket_input = ""
-            ticket_input = ""
-            classify = False
+            st.experimental_rerun()
 
-    # Always keep in sync
-    st.session_state.ticket_input = ticket_input
+    st.markdown("---")
+    st.markdown("### ⚙️ Export Toggle Tools")
+    export_action = st.selectbox("Select Export Action", ["Enable Export", "Disable Export"])
+    dealer_id = st.text_input("Dealer ID", placeholder="e.g. 4106")
+    syndicator = st.text_input("Syndicator Name", placeholder="e.g. Trader")
+    if export_action == "Enable Export":
+        inventory_type = st.selectbox("Inventory Type", ["Usagé", "Neuf", "Démonstrateur"])
+    run_export_toggle = st.button("Run Export Script")
 
-# Classification Section
+# MAIN: Run Export Script
+if run_export_toggle:
+    if not dealer_id.strip() or not syndicator.strip():
+        st.error("Please fill in Dealer ID and Syndicator.")
+    elif export_action == "Enable Export" and not inventory_type:
+        st.error("Please select an inventory type.")
+    else:
+        with st.spinner("Running export script..."):
+            try:
+                if export_action == "Enable Export":
+                    result = subprocess.run(
+                        ["python3", "automation_scripts/export_toggle_enable.py", dealer_id.strip(), syndicator.strip(), inventory_type],
+                        capture_output=True, text=True
+                    )
+                else:
+                    result = subprocess.run(
+                        ["python3", "automation_scripts/export_toggle_disable.py", dealer_id.strip(), syndicator.strip()],
+                        capture_output=True, text=True
+                    )
+
+                if result.returncode == 0:
+                    st.success("✅ Script ran successfully.")
+                else:
+                    st.error("❌ Script failed.")
+                st.code(result.stdout + "\n" + result.stderr)
+
+            except Exception as e:
+                st.error("⚠️ An error occurred while executing the script.")
+                st.exception(e)
+
+# MAIN: Classifier Output
 if classify:
-    ticket_input = st.session_state.ticket_input
+    st.session_state.ticket_input = ticket_input
     if not ticket_input.strip():
         st.error("Please paste a ticket or message.")
     else:
@@ -82,41 +116,19 @@ if classify:
                 edge = result.get("edge_case", "")
                 raw_text = ticket_input.strip()
 
-                # Split layout: left (Zoho Fields + Timeline), right (Zoho Comment)
                 left_col, right_col = st.columns([2, 1])
-
                 with left_col:
                     st.markdown("### 🧾 Zoho Fields")
-                
-                    # Card-style container using Markdown + CSS
-                    st.markdown("""
-                    <div style='
-                        padding: 1.2em 1.5em;
-                        border-radius: 12px;
-                        border: 1px solid #444;
-                        margin-bottom: 1em;
-                        font-family: monospace;
-                        font-size: 0.95em;
-                    '>
-                    <p><strong style='color:#ccc;'>Dealer Name:</strong> <code>{dealer_name}</code></p>
-                    <p><strong style='color:#ccc;'>Dealer ID:</strong> <code>{dealer_id}</code></p>
-                    <p><strong style='color:#ccc;'>Rep:</strong> <code>{rep}</code></p>
-                    <p><strong style='color:#ccc;'>Contact:</strong> <code>{contact}</code></p>
-                    <p><strong style='color:#ccc;'>Category:</strong> <code>{category}</code></p>
-                    <p><strong style='color:#ccc;'>Sub Category:</strong> <code>{sub_category}</code></p>
-                    <p><strong style='color:#ccc;'>Syndicator:</strong> <code>{syndicator}</code></p>
-                    <p><strong style='color:#ccc;'>Inventory Type:</strong> <code>{inventory_type}</code></p>
-                    </div>
-                    """.format(
-                        dealer_name=zf.get("dealer_name", ""),
-                        dealer_id=zf.get("dealer_id", ""),
-                        rep=zf.get("rep", ""),
-                        contact=zf.get("contact", ""),
-                        category=zf.get("category", ""),
-                        sub_category=zf.get("sub_category", ""),
-                        syndicator=zf.get("syndicator", ""),
-                        inventory_type=zf.get("inventory_type", ""),
-                    ), unsafe_allow_html=True)
+                    st.markdown(f"""
+**Dealer Name**: `{zf.get("dealer_name", "")}`  
+**Dealer ID**: `{zf.get("dealer_id", "")}`  
+**Rep**: `{zf.get("rep", "")}`  
+**Contact**: `{zf.get("contact", "")}`  
+**Category**: `{zf.get("category", "")}`  
+**Sub Category**: `{zf.get("sub_category", "")}`  
+**Syndicator**: `{zf.get("syndicator", "")}`  
+**Inventory Type**: `{zf.get("inventory_type", "")}`
+""")
 
                     feedback = st.button("❌ This classification is incorrect", key="flag_button_left_col")
                     if feedback:
@@ -146,7 +158,6 @@ if classify:
 
                     st.markdown("---")
                     st.markdown("### 📬 Communication Timeline")
-
                     timeline = []
                     lines = raw_text.splitlines()
                     for i, line in enumerate(lines):
@@ -159,7 +170,6 @@ if classify:
                     if not timeline:
                         preview = raw_text[:150].replace("\n", " ")
                         timeline = [f"**Message:** _{preview}..._"]
-
                     st.markdown("\n\n".join(timeline))
 
                 with right_col:
@@ -171,7 +181,6 @@ if classify:
                         file_name="zoho_comment.txt",
                         mime="text/plain"
                     )
-
             except Exception as e:
                 st.error("❌ An unexpected error occurred.")
                 st.exception(e)

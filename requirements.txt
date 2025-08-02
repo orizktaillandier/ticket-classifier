@@ -4,5 +4,4 @@ pandas
 fuzzywuzzy
 python-dotenv
 nltk
-playwright
 asyncio

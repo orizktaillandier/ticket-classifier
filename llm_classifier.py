@@ -165,8 +165,19 @@ Return a JSON object exactly as follows, with ALL keys present (use empty string
         zf["rep"] = matched_rep
         zf["contact"] = matched_rep
     else:
-        zf["dealer_name"] = dn_llm.title() if dn_llm else ""
-        zf["contact"] = zf.get("rep", "")
+        # === Group fallback logic: if no rooftop match, check for group in mapping ===
+        group_found = False
+        for name, id_ in dealer_to_id.items():
+            if "group" in name.lower():
+                zf["dealer_name"] = name.title() + " (Group suggestion)"
+                zf["dealer_id"] = id_
+                zf["rep"] = ""
+                zf["contact"] = ""
+                group_found = True
+                break
+        if not group_found:
+            zf["dealer_name"] = dn_llm.title() if dn_llm else ""
+            zf["contact"] = zf.get("rep", "")
 
     expected_keys = [
         "contact", "dealer_name", "dealer_id", "rep",

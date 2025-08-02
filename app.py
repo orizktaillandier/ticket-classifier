@@ -97,6 +97,21 @@ if classify:
                         file_name="zoho_comment.txt",
                         mime="text/plain"
                     )
+                # Add feedback button
+                if st.button("❌ This classification is incorrect"):
+                    from datetime import datetime
+                    log_entry = {
+                        "timestamp": datetime.utcnow().isoformat(),
+                        "input_text": ticket_input.strip(),
+                        "zoho_fields": zf,
+                        "zoho_comment": result.get("zoho_comment", ""),
+                        "edge_case": edge
+                    }
+                    with open("classification_feedback_log.jsonl", "a", encoding="utf-8") as log_file:
+                        import json
+                        log_file.write(json.dumps(log_entry, ensure_ascii=False) + "\n")
+                    st.info("📝 Logged for review. Thank you for your feedback!")
+
 
             except Exception as e:
                 st.error("❌ An unexpected error occurred.")

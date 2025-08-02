@@ -168,7 +168,8 @@ Return a JSON object exactly as follows, with ALL keys present (use empty string
         # === Group fallback logic: if no rooftop match, check for group in mapping ===
         group_found = False
         for name, id_ in dealer_to_id.items():
-            if "group" in name.lower():
+            lname = name.strip().lower()
+            if "group" in lname or "ffun" in lname:
                 zf["dealer_name"] = name.title() + " (Group suggestion)"
                 zf["dealer_id"] = id_
                 zf["rep"] = ""

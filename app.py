@@ -55,11 +55,12 @@ with st.sidebar:
         height=260,
     )
 
-    col1, col2 = st.columns(2)
-    with col1:
-        classify = st.button("🚀 Classify Ticket")
-    with col2:
-        if st.button("🧹 Clear Fields"):
+     # Buttons: side-by-side and centered
+    classify_col, clear_col = st.columns([1, 1])
+    with classify_col:
+        classify = st.button("🚀 Classify Ticket", use_container_width=True)
+    with clear_col:
+        if st.button("🧹 Clear Fields", use_container_width=True):
             st.session_state.ticket_input = ""
             ticket_input = ""
             classify = False

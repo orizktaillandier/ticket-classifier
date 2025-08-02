@@ -64,32 +64,32 @@ with st.sidebar:
             st.experimental_rerun()
 
     # Export Toggle Section
-    st.markdown("---")
-    st.subheader("⚙️ Export Toggle Tools")
+    #st.markdown("---")
+    #st.subheader("⚙️ Export Toggle Tools")
     
-    export_action = st.selectbox("Select Export Action", ["Enable Export", "Disable Export"])
-    dealer_id = st.text_input("Dealer ID", placeholder="e.g. 128")
-    syndicator = st.text_input("Syndicator Name", placeholder="e.g. trader")
-    inventory_types = st.multiselect("Inventory Types", ["Usagé", "Neuf", "Démonstrateur"], default=["Neuf"])
+    #export_action = st.selectbox("Select Export Action", ["Enable Export", "Disable Export"])
+    #dealer_id = st.text_input("Dealer ID", placeholder="e.g. 128")
+    #syndicator = st.text_input("Syndicator Name", placeholder="e.g. trader")
+    #inventory_types = st.multiselect("Inventory Types", ["Usagé", "Neuf", "Démonstrateur"], default=["Neuf"])
     
-    if st.button("Run Export Script"):
-        if not dealer_id.strip() or not syndicator.strip() or not inventory_types:
-            st.error("Please fill out all export fields.")
-        else:
-            for inv_type in inventory_types:
-                st.markdown(f"**Running export for:** `{inv_type}`")
+    #if st.button("Run Export Script"):
+       # if not dealer_id.strip() or not syndicator.strip() or not inventory_types:
+            #st.error("Please fill out all export fields.")
+        #else:
+            #for inv_type in inventory_types:
+                #st.markdown(f"**Running export for:** `{inv_type}`")
     
-                script = "export_toggle_enable.py" if export_action == "Enable Export" else "export_toggle_disable.py"
-                result = subprocess.run(
-                    ["python3", script, dealer_id.strip(), syndicator.strip(), inv_type],
-                    capture_output=True, text=True
-                )
+                #script = "export_toggle_enable.py" if export_action == "Enable Export" else "export_toggle_disable.py"
+                #result = subprocess.run(
+                    #["python3", script, dealer_id.strip(), syndicator.strip(), inv_type],
+                    #capture_output=True, text=True
+               # )
     
-                if result.returncode == 0:
-                    st.success(f"✅ {inv_type} script ran successfully.")
-                else:
-                    st.error(f"❌ {inv_type} script failed.")
-                st.code(result.stdout + "\n" + result.stderr)
+                #if result.returncode == 0:
+                    #st.success(f"✅ {inv_type} script ran successfully.")
+                #else:
+                   # st.error(f"❌ {inv_type} script failed.")
+                #st.code(result.stdout + "\n" + result.stderr)
 
 # MAIN: Classifier Output
 if classify:

@@ -53,6 +53,21 @@ Zoho Fields:
   "syndicator": "Car Media",
   "inventory_type": "New + Used"
 }
+Example 3:
+Message:
+"Can we please create a feed from each of the ffun group stores to export to Dealer Socket?"
+
+Zoho Fields:
+{
+  "contact": "Nathan Griffith",
+  "dealer_name": "Ffun Auto Group",
+  "dealer_id": "4320",
+  "rep": "Nathan Griffith",
+  "category": "Product Activation – Existing Client",
+  "sub_category": "Export",
+  "syndicator": "Dealer Socket",
+  "inventory_type": ""
+}
 """
 
     SYSTEM_PROMPT = (
